@@ -1,0 +1,14 @@
+{
+  "redirects": [
+    {
+      "source": "/topology",
+      "destination": "/topology/preview/",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "destination": "/topology/preview/",
+      "permanent": false
+    }
+  ]
+}
