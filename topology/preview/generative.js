@@ -32,6 +32,14 @@
     strandSpread: 1.35,
     strandInstances: 1.45,
   };
+  const scene3d = {
+    yaw: -0.62,
+    pitch: 0.3,
+    depth: 1.0,
+    perspective: 0.9,
+    autoSpin: true,
+    spinSpeed: 0.00011,
+  };
 
   function mulberry32(seed) {
     return function () {
@@ -66,6 +74,25 @@
     if (x < 0.5) return lerpColor(CYAN, VIOLET, (x - 0.25) / 0.25);
     if (x < 0.75) return lerpColor(VIOLET, MAGENTA, (x - 0.5) / 0.25);
     return lerpColor(MAGENTA, ORANGE, (x - 0.75) / 0.25);
+  }
+
+  function hexToRgb(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || ""));
+    if (!m) return null;
+    return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+  }
+
+  function scenarioColorForIndex(ix, palette) {
+    const fallback = [
+      [34, 211, 238],
+      [167, 139, 250],
+      [244, 114, 182],
+      [251, 191, 36],
+    ];
+    const source = Array.isArray(palette) && palette.length ? palette : [];
+    const entry = source[ix % Math.max(1, source.length)];
+    const rgb = hexToRgb(entry);
+    return rgb || fallback[ix % fallback.length];
   }
 
   function rgba(arr, a) {
@@ -111,14 +138,50 @@
     return TYPE_COLOR[type] || TYPE_COLOR.default;
   }
 
+  function nodeDepth(n) {
+    const ringDepth = {
+      external: -0.9,
+      "enterprise-edge": -0.58,
+      "network-enforcement": -0.24,
+      application: 0.04,
+      "soc-platform": 0.34,
+      core: 0.68,
+    };
+    const base = ringDepth[n.ringId] != null ? ringDepth[n.ringId] : 0;
+    const h = hashStr(`${n.id || ""}|${n.ringId || ""}`);
+    const jitter = (((h % 1000) / 1000) - 0.5) * 0.28;
+    return (base + jitter) * scene3d.depth;
+  }
+
   function mapPipePoint(n, w, h, view) {
     const vw = view?.width || 120;
     const vh = view?.height || 60;
     const marginX = w * 0.11;
     const marginY = h * 0.12;
+    const innerW = w - marginX * 2;
+    const innerH = h - marginY * 2;
+    const nx = Math.max(0, Math.min(vw, Number(n.x) || 0)) / vw;
+    const ny = Math.max(0, Math.min(vh, Number(n.y) || 0)) / vh;
+    const worldX = (nx - 0.5) * 2.0;
+    const worldY = (ny - 0.5) * 1.7;
+    const worldZ = nodeDepth(n);
+
+    const cy = Math.cos(scene3d.yaw);
+    const sy = Math.sin(scene3d.yaw);
+    const cp = Math.cos(scene3d.pitch);
+    const sp = Math.sin(scene3d.pitch);
+
+    const x1 = worldX * cy + worldZ * sy;
+    const z1 = -worldX * sy + worldZ * cy;
+    const y2 = worldY * cp - z1 * sp;
+    const z2 = worldY * sp + z1 * cp;
+    const camera = 2.8;
+    const proj = camera / Math.max(0.6, camera - z2 * scene3d.perspective);
+    const cx = marginX + innerW / 2;
+    const cy2 = marginY + innerH / 2;
     return {
-      x: marginX + (Math.max(0, Math.min(vw, Number(n.x) || 0)) / vw) * (w - marginX * 2),
-      y: marginY + (Math.max(0, Math.min(vh, Number(n.y) || 0)) / vh) * (h - marginY * 2),
+      x: cx + x1 * innerW * 0.46 * proj,
+      y: cy2 + y2 * innerH * 0.46 * proj,
     };
   }
 
@@ -168,6 +231,16 @@
       if (typeof x.strandInstances === "number") {
         flowTune.strandInstances = clamp(x.strandInstances, 0.5, 4);
       }
+      if (typeof x.yaw === "number") scene3d.yaw = clamp(x.yaw, -3.2, 3.2);
+      if (typeof x.pitch === "number") scene3d.pitch = clamp(x.pitch, -1.25, 1.25);
+      if (typeof x.depth === "number") scene3d.depth = clamp(x.depth, 0.4, 2.2);
+      if (typeof x.perspective === "number") {
+        scene3d.perspective = clamp(x.perspective, 0.2, 1.6);
+      }
+      if (typeof x.autoSpin === "boolean") scene3d.autoSpin = x.autoSpin;
+      if (typeof x.spinSpeed === "number") {
+        scene3d.spinSpeed = clamp(x.spinSpeed, 0, 0.00055);
+      }
     } catch (_) {
       /* ignore */
     }
@@ -175,7 +248,18 @@
 
   function saveFlowTune() {
     try {
-      localStorage.setItem(FLOW_TUNE_KEY, JSON.stringify(flowTune));
+      localStorage.setItem(
+        FLOW_TUNE_KEY,
+        JSON.stringify({
+          ...flowTune,
+          yaw: scene3d.yaw,
+          pitch: scene3d.pitch,
+          depth: scene3d.depth,
+          perspective: scene3d.perspective,
+          autoSpin: scene3d.autoSpin,
+          spinSpeed: scene3d.spinSpeed,
+        })
+      );
     } catch (_) {
       /* ignore */
     }
@@ -394,6 +478,7 @@
   }
 
   const CHASE_HOP_MS = 1650;
+  const CHASE_PRELIGHT_MS = 760;
   let activeChases = [];
   let scenarioSignature = "";
   let rafId = 0;
@@ -453,10 +538,15 @@
       const route = routes.find((r) => r.id === chase.routeId);
       if (!route || !Array.isArray(route.nodes) || route.nodes.length < 2) continue;
       const elapsed = nowMs - chase.startedAt;
+      const prelightProgress = clamp01(elapsed / CHASE_PRELIGHT_MS);
+      const travelElapsed = Math.max(0, elapsed - CHASE_PRELIGHT_MS);
       const segmentCount = route.nodes.length - 1;
-      const totalMs = segmentCount * CHASE_HOP_MS + CHASE_HOP_MS * 1.15;
+      const totalMs = CHASE_PRELIGHT_MS + segmentCount * CHASE_HOP_MS + CHASE_HOP_MS * 1.15;
       if (elapsed > totalMs) continue;
       survivors.push(chase);
+      const routeTailDecay = Math.exp(
+        -Math.max(0, travelElapsed - segmentCount * CHASE_HOP_MS) / (CHASE_HOP_MS * 2.2)
+      );
 
       for (let i = 0; i < segmentCount; i++) {
         const a = nodeById.get(route.nodes[i]);
@@ -465,7 +555,47 @@
         const p0 = mapPipePoint(a, w, h, pipe.view);
         const p1 = mapPipePoint(b, w, h, pipe.view);
         const c = buildChaseCurve(p0, p1, `${route.id}:${i}`);
-        const t = (elapsed - i * CHASE_HOP_MS) / CHASE_HOP_MS;
+        const t = (travelElapsed - i * CHASE_HOP_MS) / CHASE_HOP_MS;
+        const fullPhase = nowMs * 0.00012 + i * 0.21;
+        const fullGrad = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
+        fullGrad.addColorStop(0, rgba(MID_BLUE, 0.26));
+        fullGrad.addColorStop(0.5, rgba(CYAN, 0.38));
+        fullGrad.addColorStop(1, rgba(MID_BLUE, 0.3));
+
+        const fullGradCore = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
+        fullGradCore.addColorStop(0, rgba(lerpColor(MID_BLUE, WHITE, 0.08), 0.64));
+        fullGradCore.addColorStop(0.5, rgba(lerpColor(CYAN, WHITE, 0.14), 0.86));
+        fullGradCore.addColorStop(1, rgba(lerpColor(MID_BLUE, WHITE, 0.08), 0.68));
+        strokeQuadraticWindow(
+          p0,
+          c,
+          p1,
+          0,
+          1,
+          fullGrad,
+          8.8,
+          (0.04 + 0.22 * prelightProgress) * routeTailDecay
+        );
+        strokeQuadraticWindow(
+          p0,
+          c,
+          p1,
+          0,
+          1,
+          fullGrad,
+          4.8,
+          (0.08 + 0.26 * prelightProgress) * routeTailDecay
+        );
+        strokeQuadraticWindow(
+          p0,
+          c,
+          p1,
+          0,
+          1,
+          fullGradCore,
+          2.6,
+          (0.16 + 0.52 * prelightProgress) * routeTailDecay
+        );
         if (t <= 0) continue;
         const activeT = clamp01(t);
 
@@ -547,7 +677,7 @@
         if (t >= 0 && t <= 1.55) {
           const head = quadPoint(p0, c, p1, activeT);
           const pulse = 0.62 + 0.38 * Math.sin(activeT * Math.PI);
-          const headCol = ciscoColorAtT((i + activeT) / Math.max(1, segmentCount));
+          const headCol = ciscoColorAtT(phase + 1.0);
           const headDecay = Math.exp(-Math.max(0, t - 1) * 0.95);
           const dx = p1.x - p0.x;
           const dy = p1.y - p0.y;
@@ -601,7 +731,7 @@
         const n = nodeById.get(route.nodes[i]);
         if (!n) continue;
         const p = mapPipePoint(n, w, h, pipe.view);
-        const dt = Math.abs(elapsed - i * CHASE_HOP_MS);
+        const dt = Math.abs(travelElapsed - i * CHASE_HOP_MS);
         const k = clamp01(1 - dt / (CHASE_HOP_MS * 1.06));
         if (k <= 0) continue;
         const col = ciscoColorAtT(i / Math.max(1, route.nodes.length - 1));
@@ -984,25 +1114,75 @@
   let mode = "radial";
   let genSeed = (Date.now() & 0xffffffff) >>> 0;
   let lastPipeRaw = "";
+  let lastSceneTickMs = performance.now();
+  let sceneDragging = false;
+  let dragLastX = 0;
+  let dragLastY = 0;
 
   function parseMode() {
     const q = new URLSearchParams(window.location.search).get("mode");
     if (q === "comet" || q === "radial") mode = q;
   }
 
+  function tickScene(nowMs) {
+    const dt = Math.max(0, nowMs - lastSceneTickMs);
+    lastSceneTickMs = nowMs;
+    if (scene3d.autoSpin && !sceneDragging) {
+      scene3d.yaw += dt * scene3d.spinSpeed;
+      if (scene3d.yaw > Math.PI * 2) scene3d.yaw -= Math.PI * 2;
+    }
+  }
+
+  function initSceneInteraction() {
+    if (!canvas) return;
+    canvas.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      sceneDragging = true;
+      dragLastX = e.clientX;
+      dragLastY = e.clientY;
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (!sceneDragging) return;
+      const dx = e.clientX - dragLastX;
+      const dy = e.clientY - dragLastY;
+      dragLastX = e.clientX;
+      dragLastY = e.clientY;
+      scene3d.yaw += dx * 0.006;
+      scene3d.pitch = clamp(scene3d.pitch + dy * 0.0045, -1.1, 1.1);
+      saveFlowTune();
+      const running = render();
+      if (running || scene3d.autoSpin) scheduleAnimationFrame();
+    });
+    window.addEventListener("mouseup", () => {
+      sceneDragging = false;
+    });
+    canvas.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        scene3d.depth = clamp(scene3d.depth + (e.deltaY > 0 ? -0.05 : 0.05), 0.4, 2.2);
+        saveFlowTune();
+        const running = render();
+        if (running || scene3d.autoSpin) scheduleAnimationFrame();
+      },
+      { passive: false }
+    );
+  }
+
   function render(nowMs = performance.now()) {
+    tickScene(nowMs);
     const { w, h } = resize();
     const pipe = readGenerativePipe();
     if (pipe && pipe.nodes.length && pipe.edges.length) {
       ensureScenarioButtons(pipe);
       if (mode === "comet") drawPipeComet(w, h, genSeed, pipe);
       else drawPipeRadial(w, h, genSeed, pipe);
-      return drawScenarioChase(w, h, pipe, nowMs);
+      return drawScenarioChase(w, h, pipe, nowMs) || scene3d.autoSpin;
     }
     ensureScenarioButtons({ routes: [] });
     if (mode === "comet") drawComet(w, h, genSeed);
     else drawRadial(w, h, genSeed);
-    return false;
+    return scene3d.autoSpin;
   }
 
   function syncFromPipe() {
@@ -1137,6 +1317,18 @@
         <label>Strand instances <span id="flow-val-instances"></span></label>
         <input id="flow-instances" type="range" min="0.5" max="4" step="0.01" />
       </div>
+      <div class="flow-tune-row">
+        <label>3D depth <span id="flow-val-depth"></span></label>
+        <input id="flow-depth" type="range" min="0.4" max="2.2" step="0.01" />
+      </div>
+      <div class="flow-tune-row">
+        <label>Perspective <span id="flow-val-perspective"></span></label>
+        <input id="flow-perspective" type="range" min="0.2" max="1.6" step="0.01" />
+      </div>
+      <div class="flow-tune-row">
+        <label>Spin speed <span id="flow-val-spinspeed"></span></label>
+        <input id="flow-spinspeed" type="range" min="0" max="0.00055" step="0.00001" />
+      </div>
       <div class="flow-tune-actions">
         <button type="button" id="flow-reset">Reset</button>
       </div>
@@ -1148,10 +1340,16 @@
       inconsistency: /** @type {HTMLInputElement} */ (modal.querySelector("#flow-inconsistency")),
       spread: /** @type {HTMLInputElement} */ (modal.querySelector("#flow-spread")),
       instances: /** @type {HTMLInputElement} */ (modal.querySelector("#flow-instances")),
+      depth: /** @type {HTMLInputElement} */ (modal.querySelector("#flow-depth")),
+      perspective: /** @type {HTMLInputElement} */ (modal.querySelector("#flow-perspective")),
+      spinSpeed: /** @type {HTMLInputElement} */ (modal.querySelector("#flow-spinspeed")),
       valJitter: modal.querySelector("#flow-val-jitter"),
       valInconsistency: modal.querySelector("#flow-val-inconsistency"),
       valSpread: modal.querySelector("#flow-val-spread"),
       valInstances: modal.querySelector("#flow-val-instances"),
+      valDepth: modal.querySelector("#flow-val-depth"),
+      valPerspective: modal.querySelector("#flow-val-perspective"),
+      valSpinSpeed: modal.querySelector("#flow-val-spinspeed"),
       reset: /** @type {HTMLButtonElement} */ (modal.querySelector("#flow-reset")),
     };
 
@@ -1160,10 +1358,16 @@
       refs.inconsistency.value = String(flowTune.arcInconsistency);
       refs.spread.value = String(flowTune.strandSpread);
       refs.instances.value = String(flowTune.strandInstances);
+      refs.depth.value = String(scene3d.depth);
+      refs.perspective.value = String(scene3d.perspective);
+      refs.spinSpeed.value = String(scene3d.spinSpeed);
       refs.valJitter.textContent = flowTune.arcJitter.toFixed(2);
       refs.valInconsistency.textContent = flowTune.arcInconsistency.toFixed(2);
       refs.valSpread.textContent = flowTune.strandSpread.toFixed(2);
       refs.valInstances.textContent = flowTune.strandInstances.toFixed(2);
+      refs.valDepth.textContent = scene3d.depth.toFixed(2);
+      refs.valPerspective.textContent = scene3d.perspective.toFixed(2);
+      refs.valSpinSpeed.textContent = scene3d.spinSpeed.toFixed(5);
     };
 
     const onTune = () => {
@@ -1171,21 +1375,30 @@
       flowTune.arcInconsistency = clamp(Number(refs.inconsistency.value) || 0, 0, 2.5);
       flowTune.strandSpread = clamp(Number(refs.spread.value) || 1, 0.3, 3.5);
       flowTune.strandInstances = clamp(Number(refs.instances.value) || 1, 0.5, 4);
+      scene3d.depth = clamp(Number(refs.depth.value) || 1, 0.4, 2.2);
+      scene3d.perspective = clamp(Number(refs.perspective.value) || 1, 0.2, 1.6);
+      scene3d.spinSpeed = clamp(Number(refs.spinSpeed.value) || 0, 0, 0.00055);
       syncUi();
       saveFlowTune();
       const running = render();
-      if (running) scheduleAnimationFrame();
+      if (running || scene3d.autoSpin) scheduleAnimationFrame();
     };
 
     refs.jitter.addEventListener("input", onTune);
     refs.inconsistency.addEventListener("input", onTune);
     refs.spread.addEventListener("input", onTune);
     refs.instances.addEventListener("input", onTune);
+    refs.depth.addEventListener("input", onTune);
+    refs.perspective.addEventListener("input", onTune);
+    refs.spinSpeed.addEventListener("input", onTune);
     refs.reset.addEventListener("click", () => {
       flowTune.arcJitter = 0.45;
       flowTune.arcInconsistency = 0.52;
       flowTune.strandSpread = 1.35;
       flowTune.strandInstances = 1.45;
+      scene3d.depth = 1.0;
+      scene3d.perspective = 0.9;
+      scene3d.spinSpeed = 0.00011;
       onTune();
     });
 
@@ -1206,6 +1419,17 @@
       pushModeToUrl();
       render();
     });
+    const spinBtn = document.getElementById("btn-spin");
+    if (spinBtn) {
+      spinBtn.classList.toggle("is-active", scene3d.autoSpin);
+      spinBtn.addEventListener("click", () => {
+        scene3d.autoSpin = !scene3d.autoSpin;
+        spinBtn.classList.toggle("is-active", scene3d.autoSpin);
+        saveFlowTune();
+        const running = render();
+        if (running || scene3d.autoSpin) scheduleAnimationFrame();
+      });
+    }
     const labelsBtn = document.getElementById("btn-labels");
     if (labelsBtn) {
       labelsBtn.classList.toggle("is-active", showNodeLabels);
@@ -1222,7 +1446,7 @@
     document.getElementById("btn-sync")?.addEventListener("click", () => {
       lastPipeRaw = "";
       const running = render();
-      if (running) scheduleAnimationFrame();
+      if (running || scene3d.autoSpin) scheduleAnimationFrame();
     });
   }
 
@@ -1234,11 +1458,13 @@
     lastPipeRaw = "";
   }
   initFlowTuneUi();
+  initSceneInteraction();
   wireUi();
-  render();
+  if (scene3d.autoSpin) scheduleAnimationFrame();
+  else render();
   window.addEventListener("resize", () => {
     const running = render();
-    if (running) scheduleAnimationFrame();
+    if (running || scene3d.autoSpin) scheduleAnimationFrame();
   });
   window.addEventListener("storage", (e) => {
     if (e.key === GENERATIVE_PIPE_KEY) syncFromPipe();
