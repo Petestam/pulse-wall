@@ -28,9 +28,9 @@
   };
 
   const EDGE_STROKE = {
-    solid: { width: 0.13, dash: "none", opacity: 0.40 },
-    dashed: { width: 0.11, dash: "0.7 0.55", opacity: 0.42 },
-    dotted: { width: 0.12, dash: "0.35 0.45", opacity: 0.52 },
+    solid: { width: 0.11, dash: "none", opacity: 0.72 },
+    dashed: { width: 0.09, dash: "0.65 0.5", opacity: 0.62 },
+    dotted: { width: 0.09, dash: "0.28 0.42", opacity: 0.55 },
   };
 
   /** @type {SVGSVGElement | null} */
@@ -50,6 +50,7 @@
   /** @type {string[]} */
   let selectedRouteIds = [];
   const MAX_ROUTES = 4;
+  const GENERATIVE_PIPE_KEY = "topology.generative.pipe.v1";
 
   /** Edit mode: drag nodes, add/remove edges, palette, export JSON. */
   let editMode = false;
@@ -98,38 +99,14 @@
     [SHAPE_KIND.HEXAGON]: 1.08,
   };
 
-  /** Legend row per primitive shape (sampleType picks the swatch color). */
-  const SHAPE_KIND_LEGEND = [
-    {
-      kind: SHAPE_KIND.FILLED_CIRCLE,
-      sampleType: "platform",
-      caption: "Filled circle — platform, default / other",
-    },
-    {
-      kind: SHAPE_KIND.OUTLINE_CIRCLE,
-      sampleType: "external",
-      caption: "Outline circle — external (Internet, partners, threats)",
-    },
-    {
-      kind: SHAPE_KIND.SQUARE,
-      sampleType: "data",
-      caption: "Square — data, services, compute",
-    },
-    {
-      kind: SHAPE_KIND.DIAMOND,
-      sampleType: "network",
-      caption: "Diamond — network & delivery",
-    },
-    {
-      kind: SHAPE_KIND.TRIANGLE,
-      sampleType: "endpoint",
-      caption: "Triangle — endpoints & edge",
-    },
-    {
-      kind: SHAPE_KIND.HEXAGON,
-      sampleType: "security",
-      caption: "Hexagon — security controls",
-    },
+  /** Legend: dot scale by role (Cisco-inspired palette via SVG gradients). */
+  const DOT_LEGEND = [
+    { type: "external", caption: "External — largest ring (perimeter)" },
+    { type: "platform", caption: "Platform — large focal nodes" },
+    { type: "data", caption: "Data / crown — medium–large" },
+    { type: "security", caption: "Security controls — medium" },
+    { type: "server", caption: "Server / compute — medium" },
+    { type: "endpoint", caption: "Endpoint — smallest dots" },
   ];
 
   function hashStr(s) {
@@ -157,12 +134,55 @@
     return Math.max(min, Math.min(max, n));
   }
 
+  /** SVG-unit radius for the node dot (type drives visual hierarchy). */
+  function nodeDotRadius(type) {
+    const t = type || "default";
+    const map = {
+      endpoint: 0.38,
+      external: 0.92,
+      platform: 0.78,
+      security: 0.56,
+      network: 0.52,
+      data: 0.68,
+      service: 0.54,
+      server: 0.62,
+      default: 0.5,
+    };
+    return map[t] ?? map.default;
+  }
+
+  function nodeGradUrl(type) {
+    const t = type || "default";
+    const id = {
+      security: "nodeGrad-security",
+      platform: "nodeGrad-platform",
+      external: "nodeGrad-external",
+      endpoint: "nodeGrad-endpoint",
+      network: "nodeGrad-network",
+      data: "nodeGrad-data",
+      service: "nodeGrad-service",
+      server: "nodeGrad-server",
+      default: "nodeGrad-default",
+    }[t] || "nodeGrad-default";
+    return `url(#${id})`;
+  }
+
+  /** Distance from node center to label baseline (dots only). */
+  function dotBottom(type) {
+    return nodeDotRadius(type) + 0.28;
+  }
+
   function estimatedNodeRadius(node) {
+    const dr = nodeDotRadius(node.type || "default");
     const lines = wrapLabelLines(node.label || "", 18);
     const longest = lines.reduce((mx, ln) => Math.max(mx, ln.length), 0);
     const halfLabelW = longest * 0.22;
-    const labelH = 0.32 + lines.length * 0.92;
-    return clamp(Math.max(2.9, halfLabelW * 0.95 + 1.0, labelH * 0.6 + 1.3), 2.9, 6.2);
+    const labelH = 0.28 + lines.length * 0.88;
+    return clamp(
+      Math.max(dr + 0.55, halfLabelW * 0.92 + 0.45, dr + labelH * 0.42 + 0.35),
+      dr + 0.4,
+      6.4
+    );
   }
 
   function clampNodeToCanvas(node) {
@@ -499,7 +519,7 @@
       const r = node.layoutRadius || estimatedNodeRadius(node) || 3;
       const lines = wrapLabelLines(node.label || "", 18);
       const labelHalfW = lines.reduce((mx, ln) => Math.max(mx, ln.length * 0.22), 0);
-      const labelTop = p.y + shapeBottom(node.type || "default") + 0.32;
+      const labelTop = p.y + dotBottom(node.type || "default") + 0.28;
       const labelBottom = labelTop + lines.length * 0.92;
       minX = Math.min(minX, p.x - Math.max(r, labelHalfW + 0.4));
       maxX = Math.max(maxX, p.x + Math.max(r, labelHalfW + 0.4));
@@ -639,6 +659,22 @@
       const w = b.maxX - b.minX + pad * 2;
       const h = b.maxY - b.minY + pad * 2;
 
+      const ghost = document.createElementNS(NS, "rect");
+      ghost.setAttribute("x", String(minX - 0.2));
+      ghost.setAttribute("y", String(minY - 0.2));
+      ghost.setAttribute("width", String(w + 0.4));
+      ghost.setAttribute("height", String(h + 0.4));
+      ghost.setAttribute("rx", String((zone.rx != null ? zone.rx : 1.2) + 0.15));
+      ghost.setAttribute("ry", String((zone.rx != null ? zone.rx : 1.2) + 0.15));
+      ghost.setAttribute("fill", "none");
+      ghost.setAttribute("stroke", "#00bceb");
+      ghost.setAttribute("stroke-opacity", "0.14");
+      ghost.setAttribute("stroke-width", "0.05");
+      ghost.setAttribute("stroke-dasharray", "0.45 0.4");
+      ghost.setAttribute("class", "zone-halo-ghost");
+      ghost.setAttribute("pointer-events", "none");
+      g.appendChild(ghost);
+
       const rect = document.createElementNS(NS, "rect");
       rect.setAttribute("x", String(minX));
       rect.setAttribute("y", String(minY));
@@ -646,8 +682,8 @@
       rect.setAttribute("height", String(h));
       rect.setAttribute("rx", String(zone.rx != null ? zone.rx : 1.2));
       rect.setAttribute("ry", String(zone.rx != null ? zone.rx : 1.2));
-      rect.setAttribute("fill", zone.fill || "rgba(148, 163, 184, 0.05)");
-      rect.setAttribute("stroke", zone.stroke || "rgba(148, 163, 184, 0.14)");
+      rect.setAttribute("fill", zone.fill || "rgba(0, 188, 235, 0.06)");
+      rect.setAttribute("stroke", zone.stroke || "rgba(0, 80, 115, 0.2)");
       rect.setAttribute("stroke-width", String(zone.strokeWidth != null ? zone.strokeWidth : 0.08));
       rect.setAttribute("class", "zone-halo");
       rect.setAttribute("pointer-events", "none");
@@ -657,8 +693,10 @@
         const text = document.createElementNS(NS, "text");
         text.setAttribute("x", String(minX + 0.5));
         text.setAttribute("y", String(minY + 0.85));
-        text.setAttribute("font-size", "0.58");
-        text.setAttribute("font-family", "Inter, system-ui, sans-serif");
+        text.setAttribute("font-size", "0.52");
+        text.setAttribute("font-weight", "600");
+        text.setAttribute("font-family", "IBM Plex Sans, Inter, system-ui, sans-serif");
+        text.setAttribute("letter-spacing", "0.06");
         text.setAttribute("class", "zone-halo-label");
         text.setAttribute("text-anchor", "start");
         text.setAttribute("dominant-baseline", "hanging");
@@ -701,8 +739,8 @@
       rect.setAttribute("height", String(thickness));
       rect.setAttribute("rx", String(rx));
       rect.setAttribute("ry", String(rx));
-      rect.setAttribute("fill", membrane.fill || "rgba(245, 158, 11, 0.18)");
-      rect.setAttribute("stroke", membrane.stroke || "rgba(245, 158, 11, 0.52)");
+      rect.setAttribute("fill", membrane.fill || "rgba(255, 130, 0, 0.16)");
+      rect.setAttribute("stroke", membrane.stroke || "rgba(0, 80, 115, 0.45)");
       rect.setAttribute("stroke-width", String(membrane.strokeWidth != null ? membrane.strokeWidth : 0.1));
       if (membrane.strokeDasharray) {
         rect.setAttribute("stroke-dasharray", membrane.strokeDasharray);
@@ -717,10 +755,12 @@
         const text = document.createElementNS(NS, "text");
         text.setAttribute("x", String(mx));
         text.setAttribute("y", String(my - 1.0));
-        text.setAttribute("font-size", "0.66");
-        text.setAttribute("font-family", "Inter, system-ui, sans-serif");
+        text.setAttribute("font-size", "0.6");
+        text.setAttribute("font-weight", "600");
+        text.setAttribute("font-family", "IBM Plex Sans, Inter, system-ui, sans-serif");
+        text.setAttribute("letter-spacing", "0.04");
         text.setAttribute("text-anchor", "middle");
-        text.setAttribute("fill", "#fcd34d");
+        text.setAttribute("fill", "#005073");
         text.setAttribute("class", "membrane-label");
         text.setAttribute("pointer-events", "none");
         text.textContent = membrane.label;
@@ -734,6 +774,7 @@
     if (!g) return;
     g.innerHTML = "";
     if (!show) return;
+    const majorStep = CELL * 5;
     for (let x = 0; x <= VIEW_W; x += CELL) {
       const line = document.createElementNS(
         "http://www.w3.org/2000/svg",
@@ -743,7 +784,8 @@
       line.setAttribute("y1", "0");
       line.setAttribute("x2", String(x));
       line.setAttribute("y2", String(VIEW_H));
-      line.setAttribute("class", "grid-line");
+      const major = x % majorStep === 0 || x === VIEW_W;
+      line.setAttribute("class", major ? "grid-line grid-line--major" : "grid-line");
       g.appendChild(line);
     }
     for (let y = 0; y <= VIEW_H; y += CELL) {
@@ -755,7 +797,8 @@
       line.setAttribute("y1", String(y));
       line.setAttribute("x2", String(VIEW_W));
       line.setAttribute("y2", String(y));
-      line.setAttribute("class", "grid-line");
+      const major = y % majorStep === 0 || y === VIEW_H;
+      line.setAttribute("class", major ? "grid-line grid-line--major" : "grid-line");
       g.appendChild(line);
     }
   }
@@ -776,59 +819,90 @@
       if (!a || !b) return;
       const pa = nodePos(a);
       const pb = nodePos(b);
-      const line = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "line"
-      );
-      line.setAttribute("x1", String(pa.x));
-      line.setAttribute("y1", String(pa.y));
-      line.setAttribute("x2", String(pb.x));
-      line.setAttribute("y2", String(pb.y));
       const st = EDGE_STROKE[edge.style] || EDGE_STROKE.solid;
       const isTrust = Boolean(edge.trustBoundary);
-      line.setAttribute("stroke", isTrust ? "#f59e0b" : "#5c6b82");
-      line.setAttribute(
-        "stroke-width",
-        String(isTrust ? Math.max(st.width, 0.18) : st.width)
-      );
-      line.setAttribute(
-        "stroke-opacity",
-        String(isTrust ? 0.88 : st.opacity)
-      );
-      if (st.dash !== "none") line.setAttribute("stroke-dasharray", st.dash);
-      line.setAttribute("class", isTrust ? "base-edge edge-trust-boundary" : "base-edge");
-      line.dataset.from = edge.from;
-      line.dataset.to = edge.to;
-      line.dataset.edgeIndex = String(edgeIndex);
-      if (editMode && selectedEdgeIndex === edgeIndex) {
-        line.setAttribute("stroke", "#38bdf8");
-        line.setAttribute("stroke-opacity", "1");
-      }
-      line.setAttribute("pointer-events", editMode ? "none" : "visiblePainted");
-      line.addEventListener("mouseenter", (e) => {
+      const key = `${edge.from}|${edge.to}`;
+      const { strands, bendMag } = edgeStrandPaths(pa.x, pa.y, pb.x, pb.y, key);
+      const midD = strands[1].d;
+
+      const dx = pb.x - pa.x;
+      const dy = pb.y - pa.y;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+
+      const eg = document.createElementNS(NS, "g");
+      eg.setAttribute("class", isTrust ? "base-edge-group edge-trust-boundary" : "base-edge-group");
+      eg.dataset.from = edge.from;
+      eg.dataset.to = edge.to;
+      eg.dataset.edgeIndex = String(edgeIndex);
+
+      const strokeGrad = isTrust ? "url(#edge-trust-grad)" : "url(#edge-strand-grad)";
+      const widths = [0.075, 0.11, 0.075];
+      const opac = [0.38, 0.78, 0.38];
+      const selected = editMode && selectedEdgeIndex === edgeIndex;
+
+      const spine = document.createElementNS(NS, "path");
+      spine.setAttribute("d", midD);
+      spine.setAttribute("fill", "none");
+      spine.setAttribute("stroke", "#061424");
+      spine.setAttribute("stroke-width", "0.2");
+      spine.setAttribute("stroke-opacity", "0.055");
+      spine.setAttribute("stroke-linecap", "round");
+      spine.setAttribute("class", "base-edge-spine");
+      spine.setAttribute("pointer-events", "none");
+      eg.appendChild(spine);
+
+      strands.forEach((s, si) => {
+        const path = document.createElementNS(NS, "path");
+        path.setAttribute("d", s.d);
+        path.setAttribute("fill", "none");
+        if (selected) {
+          path.setAttribute("stroke", "#00bceb");
+        } else {
+          path.setAttribute("stroke", strokeGrad);
+        }
+        path.setAttribute("stroke-width", String(widths[si]));
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute(
+          "stroke-opacity",
+          String(selected ? 0.95 : opac[si] * st.opacity)
+        );
+        if (st.dash !== "none") path.setAttribute("stroke-dasharray", st.dash);
+        path.setAttribute("class", "base-edge-strand");
+        path.setAttribute("pointer-events", editMode ? "none" : "stroke");
+        eg.appendChild(path);
+      });
+
+      const showTip = (e) => {
         const aNode = nodeMap.get(edge.from);
         const bNode = nodeMap.get(edge.to);
         if (!tooltipEl || !aNode || !bNode) return;
         tooltipEl.hidden = false;
         const styleLbl = edge.style || "solid";
-        tooltipEl.innerHTML = `<strong>${escapeHtml(aNode.label)} → ${escapeHtml(bNode.label)}</strong><div>${escapeHtml(styleLbl)}${isTrust ? " · trust boundary" : ""}</div>`;
+        tooltipEl.innerHTML = `<div class="tooltip__meta">EDGE</div><strong class="tooltip__title">${escapeHtml(aNode.label)} → ${escapeHtml(bNode.label)}</strong><div class="tooltip__body">${escapeHtml(styleLbl)}${isTrust ? " · trust boundary" : ""}</div>`;
         moveTooltip(e);
-      });
-      line.addEventListener("mousemove", moveTooltip);
-      line.addEventListener("mouseleave", hideTooltip);
-      g.appendChild(line);
+      };
+      if (!editMode) {
+        eg.addEventListener("mouseenter", showTip);
+        eg.addEventListener("mousemove", moveTooltip);
+        eg.addEventListener("mouseleave", hideTooltip);
+      }
+      g.appendChild(eg);
 
       if (editMode) {
-        const hit = document.createElementNS(NS, "line");
-        hit.setAttribute("x1", String(pa.x));
-        hit.setAttribute("y1", String(pa.y));
-        hit.setAttribute("x2", String(pb.x));
-        hit.setAttribute("y2", String(pb.y));
+        const hit = document.createElementNS(NS, "path");
+        hit.setAttribute("d", midD);
         hit.setAttribute("stroke", "transparent");
-        hit.setAttribute("stroke-width", "1.6");
+        hit.setAttribute("stroke-width", "1.85");
+        hit.setAttribute("fill", "none");
         hit.setAttribute("pointer-events", "stroke");
+        hit.setAttribute("stroke-linecap", "round");
         hit.setAttribute("class", "base-edge-hit");
         hit.dataset.edgeIndex = String(edgeIndex);
+        hit.addEventListener("mouseenter", showTip);
+        hit.addEventListener("mousemove", moveTooltip);
+        hit.addEventListener("mouseleave", hideTooltip);
         hit.addEventListener("click", (e) => {
           if (!editMode) return;
           e.stopPropagation();
@@ -840,21 +914,20 @@
       }
 
       if (gLabels && edge.midLabel) {
-        const mx = (pa.x + pb.x) / 2;
-        const my = (pa.y + pb.y) / 2;
-        const dx = pb.x - pa.x;
-        const dy = pb.y - pa.y;
-        const len = Math.sqrt(dx * dx + dy * dy) || 1;
-        const ox = (-dy / len) * 1.05;
-        const oy = (dx / len) * 1.05;
+        const mx = (pa.x + pb.x) / 2 + nx * bendMag * 0.36;
+        const my = (pa.y + pb.y) / 2 + ny * bendMag * 0.36;
+        const ox = (-ny) * 0.85;
+        const oy = nx * 0.85;
         const text = document.createElementNS(NS, "text");
         text.setAttribute("x", String(mx + ox));
         text.setAttribute("y", String(my + oy));
-        text.setAttribute("font-size", "0.62");
-        text.setAttribute("font-family", "Inter, system-ui, sans-serif");
+        text.setAttribute("font-size", "0.52");
+        text.setAttribute("font-weight", "600");
+        text.setAttribute("letter-spacing", "0.12");
+        text.setAttribute("font-family", "IBM Plex Sans, Inter, system-ui, sans-serif");
         text.setAttribute("text-anchor", "middle");
         text.setAttribute("dominant-baseline", "middle");
-        text.setAttribute("fill", "#fde68a");
+        text.setAttribute("fill", "#005073");
         text.setAttribute("class", "edge-mid-label");
         text.setAttribute("pointer-events", "none");
         text.textContent = edge.midLabel;
@@ -872,10 +945,10 @@
 
     const routes = routesPayload.routes || [];
     const palette = routesPayload.routeColors || [
-      "#22d3ee",
-      "#a78bfa",
-      "#f472b6",
-      "#fbbf24",
+      "#00bceb",
+      "#e22386",
+      "#ff8200",
+      "#005073",
     ];
 
     const activeRoutes = selectedRouteIds
@@ -911,20 +984,27 @@
           uniqueRouteIds.length
         );
 
-        const line = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "line"
-        );
-        line.setAttribute("x1", String(o.x1));
-        line.setAttribute("y1", String(o.y1));
-        line.setAttribute("x2", String(o.x2));
-        line.setAttribute("y2", String(o.y2));
-        line.setAttribute("stroke", color);
-        line.setAttribute("stroke-width", "0.42");
-        line.setAttribute("stroke-linecap", "round");
-        line.setAttribute("filter", "url(#route-glow)");
-        line.setAttribute("class", "route-edge");
-        g.appendChild(line);
+        const d = routeCurvedPath(o.x1, o.y1, o.x2, o.y2, route.id, i);
+        const glow = document.createElementNS(NS, "path");
+        glow.setAttribute("d", d);
+        glow.setAttribute("fill", "none");
+        glow.setAttribute("stroke", color);
+        glow.setAttribute("stroke-width", "0.72");
+        glow.setAttribute("stroke-opacity", "0.24");
+        glow.setAttribute("stroke-linecap", "round");
+        glow.setAttribute("filter", "url(#route-glow-soft)");
+        glow.setAttribute("class", "route-edge-glow");
+        g.appendChild(glow);
+
+        const path = document.createElementNS(NS, "path");
+        path.setAttribute("d", d);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", color);
+        path.setAttribute("stroke-width", "0.38");
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("filter", "url(#route-glow)");
+        path.setAttribute("class", "route-edge");
+        g.appendChild(path);
       }
     });
 
@@ -946,29 +1026,6 @@
         li.textContent = "No routes selected.";
         legendRoutes.appendChild(li);
       }
-    }
-  }
-
-  function nodeFill(type) {
-    switch (type) {
-      case "security":
-        return "#f87171";
-      case "platform":
-        return "#10b981";
-      case "external":
-        return "#cbd5e1";
-      case "endpoint":
-        return "#e2e8f0";
-      case "network":
-        return "#60a5fa";
-      case "data":
-        return "#eab308";
-      case "service":
-        return "#a78bfa";
-      case "server":
-        return "#a5b4fc";
-      default:
-        return "#9ca3af";
     }
   }
 
@@ -1120,6 +1177,68 @@
     return appendShapeForKind(g, shapeKindForType(type), fill, stroke);
   }
 
+  /** Ash Thorp–style multi-size gradient dots (replaces polygon shapes on canvas). */
+  function appendNodeDot(g, type) {
+    const t = type || "default";
+    const r = nodeDotRadius(t);
+    const fill = "#08111d";
+    const stroke = nodeGradUrl(t);
+    const sw = t === "external" ? 0.12 : 0.08;
+    const gap = t === "external" ? 0.2 : 0.16;
+
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", "0");
+    c.setAttribute("cy", "0");
+    c.setAttribute("r", String(r));
+    c.setAttribute("fill", fill);
+    c.setAttribute("class", "topology-node-dot");
+    g.appendChild(c);
+
+    const ring = document.createElementNS(NS, "circle");
+    ring.setAttribute("cx", "0");
+    ring.setAttribute("cy", "0");
+    ring.setAttribute("r", String(r + gap));
+    ring.setAttribute("fill", "none");
+    ring.setAttribute("stroke", stroke);
+    ring.setAttribute("stroke-width", String(sw));
+    ring.setAttribute("class", "topology-node-dot-ring");
+    ring.setAttribute("pointer-events", "none");
+    g.appendChild(ring);
+  }
+
+  /**
+   * Three curved Bézier strands between endpoints (deterministic per edge key).
+   * @returns {{ strands: { d: string }[], bendMag: number }}
+   */
+  function edgeStrandPaths(x1, y1, x2, y2, seedKey) {
+    const seed = hashStr(seedKey);
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const phase = ((seed % 1000) / 1000) * Math.PI * 2;
+    const bendMag = Math.min(len * 0.2, 5.5) * (0.42 + 0.58 * Math.sin(phase));
+    const strands = [];
+    for (let s = -1; s <= 1; s++) {
+      const spread = s * 0.22;
+      const bend = bendMag + spread * 0.4;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const cx1 = x1 + dx * 0.32 + nx * bend;
+      const cy1 = y1 + dy * 0.32 + ny * bend;
+      const cx2 = x1 + dx * 0.68 + nx * bend;
+      const cy2 = y1 + dy * 0.68 + ny * bend;
+      const d = `M ${x1} ${y1} C ${cx1} ${cy1} ${cx2} ${cy2} ${x2} ${y2}`;
+      strands.push({ d });
+    }
+    return { strands, bendMag };
+  }
+
+  function routeCurvedPath(x1, y1, x2, y2, routeId, segIndex) {
+    const key = `${routeId}|${segIndex}`;
+    const { strands } = edgeStrandPaths(x1, y1, x2, y2, key);
+    return strands[1].d;
+  }
+
   let nodeDragMoved = false;
 
   function syncEdgeModeButton() {
@@ -1241,9 +1360,6 @@
     gShapes.innerHTML = "";
     gLabels.innerHTML = "";
 
-    const fill = (t) => nodeFill(t);
-    const stroke = "#0f1419";
-
     nodeMap.forEach((node) => {
       const p = nodePos(node);
       const type = node.type || "default";
@@ -1252,7 +1368,7 @@
       grp.setAttribute("transform", `translate(${p.x},${p.y})`);
       grp.dataset.nodeId = node.id;
 
-      appendShapeForType(grp, type, fill(type), stroke);
+      appendNodeDot(grp, type);
 
       grp.addEventListener("mouseenter", (e) => showTooltip(e, node, p.x, p.y));
       grp.addEventListener("mousemove", moveTooltip);
@@ -1280,7 +1396,7 @@
       const lines = wrapLabelLines(node.label, 18);
       const lineHeight = 0.92;
       const fontSize = 0.78;
-      const topY = p.y + shapeBottom(type) + 0.32;
+      const topY = p.y + dotBottom(type) + 0.28;
 
       lines.forEach((line, i) => {
         const text = document.createElementNS(NS, "text");
@@ -1290,7 +1406,9 @@
         text.setAttribute("dominant-baseline", "hanging");
         text.setAttribute("class", "node-label");
         text.setAttribute("font-size", String(fontSize));
-        text.setAttribute("font-family", "Inter, system-ui, sans-serif");
+        text.setAttribute("font-weight", "600");
+        text.setAttribute("letter-spacing", "0.03");
+        text.setAttribute("font-family", "IBM Plex Sans, Inter, system-ui, sans-serif");
         text.setAttribute("pointer-events", "none");
         text.textContent = line;
         gLabels.appendChild(text);
@@ -1302,18 +1420,17 @@
     const el = document.getElementById("legend-shapes");
     if (!el) return;
     el.innerHTML = "";
-    const stroke = "#94a3b8";
-    for (const row of SHAPE_KIND_LEGEND) {
+    for (const row of DOT_LEGEND) {
       const li = document.createElement("li");
       li.className = "legend-shape-row";
 
       const mini = document.createElementNS(NS, "svg");
       mini.setAttribute("viewBox", "-2.4 -2.4 4.8 4.8");
-      mini.setAttribute("width", "32");
-      mini.setAttribute("height", "32");
+      mini.setAttribute("width", "36");
+      mini.setAttribute("height", "36");
       mini.classList.add("legend-shape-svg");
       const mg = document.createElementNS(NS, "g");
-      appendShapeForKind(mg, row.kind, nodeFill(row.sampleType), stroke);
+      appendNodeDot(mg, row.type);
       mini.appendChild(mg);
 
       const span = document.createElement("span");
@@ -1349,14 +1466,14 @@
         g.style.opacity = id === focusedNodeId || neighbors.has(id) ? "1" : "0.25";
       }
     });
-    document.querySelectorAll(".base-edge").forEach((line) => {
+    document.querySelectorAll(".base-edge-group").forEach((grp) => {
       if (!neighbors) {
-        line.style.opacity = "";
+        grp.style.opacity = "";
       } else {
-        const f = line.dataset.from;
-        const t = line.dataset.to;
+        const f = grp.dataset.from;
+        const t = grp.dataset.to;
         const connected = f === focusedNodeId || t === focusedNodeId;
-        line.style.opacity = connected ? "0.85" : "0.08";
+        grp.style.opacity = connected ? "1" : "0.12";
       }
     });
     document.querySelectorAll(".node-label").forEach((lbl) => {
@@ -1388,8 +1505,8 @@
     document.querySelectorAll(".topology-node-group").forEach((g) => {
       g.style.opacity = "";
     });
-    document.querySelectorAll(".base-edge").forEach((line) => {
-      line.style.opacity = "";
+    document.querySelectorAll(".base-edge-group").forEach((grp) => {
+      grp.style.opacity = "";
     });
     document.querySelectorAll(".node-label").forEach((lbl) => {
       lbl.style.opacity = "";
@@ -1401,9 +1518,9 @@
   function showTooltip(evt, node, _sx, _sy) {
     if (!tooltipEl) return;
     tooltipEl.hidden = false;
-    tooltipEl.innerHTML = `<strong>${escapeHtml(node.label)}</strong><span class="ring">${escapeHtml(
+    tooltipEl.innerHTML = `<div class="tooltip__meta">NODE</div><strong class="tooltip__title">${escapeHtml(node.label)}</strong><span class="tooltip__ring">${escapeHtml(
       node.ringLabel
-    )}</span><div>${escapeHtml(node.id)} · ${escapeHtml(node.type)}</div>`;
+    )}</span><div class="tooltip__id">${escapeHtml(node.id)} · ${escapeHtml(node.type)}</div>`;
     moveTooltip(evt);
   }
 
@@ -1553,6 +1670,72 @@
     renderRoutes();
   }
 
+  function buildGenerativePipePayload() {
+    if (!components) return null;
+    const nodes = [];
+    nodeMap.forEach((node) => {
+      const p = nodePos(node);
+      nodes.push({
+        id: node.id,
+        label: node.label || "",
+        type: node.type || "default",
+        ringId: node.ringId || "",
+        x: Number(p.x) || 0,
+        y: Number(p.y) || 0,
+      });
+    });
+    const edges = (components.edges || []).map((e) => ({
+      from: e.from,
+      to: e.to,
+      style: e.style || "solid",
+      trustBoundary: Boolean(e.trustBoundary),
+      midLabel: e.midLabel || "",
+    }));
+    const routes = (routesPayload?.routes || []).map((r) => ({
+      id: r.id,
+      label: r.label || "",
+      nodes: Array.isArray(r.nodes) ? [...r.nodes] : [],
+      mode: r.mode || "",
+    }));
+    const zoneHalos = (components.zoneHalos || []).map((z) => ({
+      ringId: z.ringId || "",
+      label: z.label || "",
+      padding: Number(z.padding) || 1.3,
+      rx: Number(z.rx) || 1.2,
+      strokeColor: z.strokeColor || "#00bceb",
+      fillColor: z.fillColor || "rgba(0,188,235,0.06)",
+    }));
+    const toggleGrid = document.getElementById("toggle-grid");
+    const toggleTrust = document.getElementById("toggle-trust-zones");
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      view: { width: VIEW_W, height: VIEW_H },
+      display: {
+        showGrid: Boolean(toggleGrid && toggleGrid.checked),
+        showTrustZones: Boolean(toggleTrust ? toggleTrust.checked : true),
+      },
+      selectedRouteIds: [...selectedRouteIds],
+      nodes,
+      edges,
+      routes,
+      zoneHalos,
+      routeColors: Array.isArray(routesPayload?.routeColors)
+        ? [...routesPayload.routeColors]
+        : [],
+    };
+  }
+
+  function publishGenerativePipe() {
+    const payload = buildGenerativePipePayload();
+    if (!payload) return;
+    try {
+      localStorage.setItem(GENERATIVE_PIPE_KEY, JSON.stringify(payload));
+    } catch (_) {
+      /* ignore storage failures */
+    }
+  }
+
   function redrawStatic() {
     buildNodeMap(components);
     const layoutMode = components?.display?.layout;
@@ -1569,6 +1752,7 @@
     renderLegendEdges();
     renderLegendShapes();
     renderRoutes();
+    publishGenerativePipe();
   }
 
   function setEditorUiEnabled(on) {
@@ -1708,6 +1892,14 @@
     { type: "external", ringId: "external", label: "External" },
   ];
 
+  function draftNewNodeLabel(fallback) {
+    const input = /** @type {HTMLInputElement | null} */ (
+      document.getElementById("new-node-label")
+    );
+    const typed = input ? input.value.trim() : "";
+    return typed || fallback || "New";
+  }
+
   function initPalette() {
     const host = document.getElementById("palette");
     if (!host) return;
@@ -1730,7 +1922,7 @@
           JSON.stringify({
             type: tpl.type,
             ringId: tpl.ringId,
-            label: tpl.label,
+            label: draftNewNodeLabel(tpl.label),
           })
         );
         e.dataTransfer.effectAllowed = "copy";
@@ -1741,7 +1933,7 @@
         placePalettePending = {
           type: tpl.type,
           ringId: tpl.ringId,
-          label: tpl.label,
+          label: draftNewNodeLabel(tpl.label),
         };
         redrawStatic();
       });
@@ -1803,6 +1995,12 @@
       relayoutFromScratch();
     });
 
+    document.getElementById("btn-open-generative")?.addEventListener("click", () => {
+      publishGenerativePipe();
+      const u = new URL("./generative.html", window.location.href);
+      window.open(u.href, "_blank", "noopener,noreferrer");
+    });
+
     window.addEventListener("keydown", (e) => {
       if (!editMode) return;
       const tag = document.activeElement && document.activeElement.tagName;
@@ -1813,6 +2011,21 @@
           deleteSelectedEdge();
         }
       }
+    });
+  }
+
+  function initDrawerUi() {
+    const btn = document.getElementById("btn-toggle-drawer");
+    if (!btn) return;
+    const setState = (open) => {
+      document.body.classList.toggle("drawer-collapsed", !open);
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      btn.textContent = open ? "Hide editor" : "Show editor";
+    };
+    setState(!document.body.classList.contains("drawer-collapsed"));
+    btn.addEventListener("click", () => {
+      const open = document.body.classList.contains("drawer-collapsed");
+      setState(open);
     });
   }
 
@@ -1931,24 +2144,29 @@
   function injectGridStyles() {
     const style = document.createElement("style");
     style.textContent = `
-      .grid-line { stroke: #1e293b; stroke-width: 0.06; pointer-events: none; }
+      .grid-line { stroke: rgba(91, 122, 154, 0.16); stroke-width: 0.05; pointer-events: none; }
+      .grid-line--major { stroke: rgba(0, 80, 115, 0.14); stroke-width: 0.075; }
+      .base-edge-spine { vector-effect: non-scaling-stroke; }
+      .route-edge-glow { pointer-events: none; }
       .route-edge { pointer-events: none; }
-      .node-label { fill: #dce4f0; paint-order: stroke fill; stroke: rgba(7,10,14,0.88); stroke-width: 0.09; font-weight: 500; }
+      .node-label { fill: #061424; paint-order: stroke fill; stroke: rgba(255,255,255,0.92); stroke-width: 0.1; font-weight: 600; letter-spacing: 0.03em; font-family: "IBM Plex Sans", Inter, system-ui, sans-serif; }
       .topology-node-group { cursor: default; }
-      .edge-mid-label { paint-order: stroke fill; stroke: rgba(7,10,14,0.92); stroke-width: 0.12; font-weight: 500; }
-      .membrane-label { paint-order: stroke fill; stroke: rgba(7,10,14,0.92); stroke-width: 0.12; font-weight: 600; }
-      .zone-halo-label { fill: rgba(255,255,255,0.22); paint-order: stroke fill; stroke: rgba(7,10,14,0.8); stroke-width: 0.06; pointer-events: none; }
-      .base-edge:hover { stroke-opacity: 0.85 !important; stroke-width: 0.22 !important; }
+      .edge-mid-label { paint-order: stroke fill; stroke: rgba(255,255,255,0.88); stroke-width: 0.07; font-weight: 600; letter-spacing: 0.12em; }
+      .membrane-label { paint-order: stroke fill; stroke: rgba(255,255,255,0.9); stroke-width: 0.08; font-weight: 600; fill: #005073; }
+      .zone-halo-label { fill: #061424; paint-order: stroke fill; stroke: rgba(255,255,255,0.85); stroke-width: 0.05; pointer-events: none; opacity: 0.75; }
+      .base-edge-group:hover .base-edge-strand { stroke-opacity: 0.95 !important; }
+      .base-edge-group:hover .base-edge-spine { stroke-opacity: 0.1 !important; }
     `;
     document.head.appendChild(style);
   }
 
   async function main() {
     injectGridStyles();
-    const panelHead = document.querySelector(".panel__head h1");
+    initDrawerUi();
+    const panelTitle = document.getElementById("panel-topology-title");
     try {
       await load();
-      if (panelHead) panelHead.textContent = components.name || "Master topology";
+      if (panelTitle) panelTitle.textContent = components.name || "Master topology";
       initPanZoom();
       initEditor();
       redrawStatic();
@@ -1957,6 +2175,7 @@
 
       document.getElementById("toggle-grid")?.addEventListener("change", (e) => {
         renderGrid(/** @type {HTMLInputElement} */ (e.target).checked);
+        publishGenerativePipe();
       });
 
       document.getElementById("toggle-connectors")?.addEventListener("change", (e) => {
@@ -1975,6 +2194,7 @@
         const membranes = document.getElementById("layer-trust-membranes");
         if (halos) halos.style.display = vis;
         if (membranes) membranes.style.display = vis;
+        publishGenerativePipe();
       });
 
       document.getElementById("btn-preset")?.addEventListener("click", presetMixed);
@@ -1984,8 +2204,8 @@
       presetMixed();
     } catch (err) {
       console.error(err);
-      if (panelHead) {
-        panelHead.textContent = "Failed to load topology";
+      if (panelTitle) {
+        panelTitle.textContent = "Failed to load topology";
       }
       const p = document.createElement("p");
       p.className = "muted";
