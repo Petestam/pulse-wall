@@ -1,0 +1,173 @@
+{
+  "id": "pulse-wall-routes",
+  "name": "Scenario branches (12)",
+  "description": "Twelve narrative routes across corrected topology. Four security, four observability, four platform.",
+  "routeColors": [
+    "#22d3ee",
+    "#a78bfa",
+    "#f472b6",
+    "#fbbf24"
+  ],
+  "routes": [
+    {
+      "id": "sec-react2shell",
+      "label": "React2Shell — 9-stage attack (doc)",
+      "mode": "security",
+      "description": "Composite scenario: AI-assisted prompt chain + deserialization/RCE (React2Shell-class). Ingress through DMZ/FW/LB to AI chat, malicious payload crosses AI→backend trust boundary, IPS to Application Server (React SSR / RCE), XDR containment, Splunk ES correlation (RBA). Parallel edges cover AI Defense alerts, Nexus/NetFlow to ES, outbound C2 blocked at firewall, and SOAR.",
+      "nodes": [
+        "internet-users",
+        "dmz",
+        "fw-perimeter",
+        "adc",
+        "web",
+        "ai",
+        "backend",
+        "ips",
+        "app-server",
+        "cisco-xdr",
+        "splunk-es"
+      ],
+      "attackSteps": [
+        {
+          "step": 1,
+          "title": "Entry — Load Balancer",
+          "tool": "L7 Ingress / Load Balancer",
+          "nodes": ["internet-users", "dmz", "fw-perimeter", "adc", "web", "ai"],
+          "telemetryToSplunk": ["adc"]
+        },
+        {
+          "step": 2,
+          "title": "AI layer — prompt injection detection",
+          "tool": "Cisco AI Defense",
+          "nodes": ["ai", "ai-defense"],
+          "telemetryToSplunk": ["ai-defense"]
+        },
+        {
+          "step": 3,
+          "title": "AI → backend trust boundary",
+          "tool": "Trust boundary (malicious serialized payload)",
+          "nodes": ["ai", "backend"],
+          "edgeStyle": "dashed"
+        },
+        {
+          "step": 4,
+          "title": "Deep inspection — IPS",
+          "tool": "Cisco Secure IPS",
+          "nodes": ["backend", "ips", "app-server"],
+          "telemetryToSplunk": ["ips"]
+        },
+        {
+          "step": 5,
+          "title": "Smart switch — east-west visibility",
+          "tool": "Cisco Nexus 9000 Series",
+          "nodes": ["backend", "app", "app-server", "nexus"],
+          "telemetryToSplunk": ["nexus"]
+        },
+        {
+          "step": 6,
+          "title": "Exploitation — Application Server (React SSR)",
+          "tool": "RCE on Application Server",
+          "nodes": ["app-server"]
+        },
+        {
+          "step": 7,
+          "title": "Outbound behavior — next-gen firewall",
+          "tool": "Cisco Secure Firewall",
+          "nodes": ["app-server", "fw-perimeter", "threats"],
+          "telemetryToSplunk": ["fw-perimeter"]
+        },
+        {
+          "step": 8,
+          "title": "Endpoint detection — containment",
+          "tool": "Cisco XDR / Secure Endpoint",
+          "nodes": ["app-server", "secure-endpoint", "cisco-xdr"],
+          "telemetryToSplunk": ["cisco-xdr"]
+        },
+        {
+          "step": 9,
+          "title": "Correlation layer — RBA",
+          "tool": "Splunk Enterprise Security",
+          "nodes": ["splunk-es"],
+          "note": "Correlates ADC, AI Defense, IPS, Nexus/NetFlow, firewall C2, and XDR alerts on the Application Server entity"
+        }
+      ]
+    },
+    {
+      "id": "sec-phishing-lateral",
+      "label": "Phishing to lateral movement",
+      "mode": "security",
+      "description": "BEC / phishing email to endpoint compromise via stolen creds, lateral movement through campus to core assets.",
+      "nodes": ["threat-email", "email", "managed-ep", "campus", "app", "dc", "identity", "business", "crown"]
+    },
+    {
+      "id": "sec-ai-abuse",
+      "label": "AI pipeline abuse",
+      "mode": "security",
+      "description": "Adversarial prompt or model abuse via AI services, detected by Cisco AI Defense, correlated in XDR.",
+      "nodes": ["web", "ai", "ai-defense", "cisco-xdr", "splunk-es", "splunk-soar"]
+    },
+    {
+      "id": "sec-sase-remote",
+      "label": "Compromised remote user",
+      "mode": "security",
+      "description": "Remote user device compromised post-MFA, SASE detects anomalous session patterns, XDR correlates across identity and endpoint.",
+      "nodes": ["remote-users", "duo", "secure-access", "identity", "cisco-xdr", "splunk-es"]
+    },
+    {
+      "id": "obs-api-latency",
+      "label": "API / service latency chain",
+      "mode": "observability",
+      "description": "End-user request through campus, API gateway, backend. OTEL traces latency, Splunk Observability alerts on SLO breach.",
+      "nodes": ["managed-ep", "campus", "web", "api", "backend", "otel", "splunk-obs"]
+    },
+    {
+      "id": "obs-branch-sdwan",
+      "label": "Branch / SD-WAN degradation",
+      "mode": "observability",
+      "description": "Branch office link degrades, SD-WAN reroutes, Secure Network Analytics flags anomaly, Observability shows impact.",
+      "nodes": ["branch", "sdwan", "sna", "app", "otel", "splunk-obs", "fabric"]
+    },
+    {
+      "id": "obs-cloud-dependency",
+      "label": "Cloud dependency failure",
+      "mode": "observability",
+      "description": "SaaS provider outage cascades through multi-cloud compute into backend. Observability traces root cause via OTEL.",
+      "nodes": ["saas", "multi-cloud", "cloud-compute", "backend", "otel", "splunk-obs"]
+    },
+    {
+      "id": "obs-dc-slo",
+      "label": "Data center SLO breach",
+      "mode": "observability",
+      "description": "On-prem data center resource exhaustion impacts core data and business systems. Federated search correlates across ES and Obs.",
+      "nodes": ["dc", "core-data", "business", "otel", "splunk-obs", "fabric", "splunk-es"]
+    },
+    {
+      "id": "plat-unified-siem-xdr",
+      "label": "Unified SIEM + XDR pipeline",
+      "mode": "platform",
+      "description": "All security controls feed Cisco XDR (tier 1/2) which escalates to Splunk ES (tier 3). SOAR automates response. Talos enriches.",
+      "nodes": ["fw-perimeter", "umbrella", "secure-endpoint", "sna", "cisco-xdr", "talos", "splunk-es", "splunk-soar"]
+    },
+    {
+      "id": "plat-telemetry-plane",
+      "label": "Full-stack telemetry plane",
+      "mode": "platform",
+      "description": "OTEL collectors across all app tiers feed Observability Cloud. Network Analytics + SD-WAN telemetry via fabric to ES.",
+      "nodes": ["web", "api", "app", "backend", "otel", "splunk-obs", "fabric", "sna", "splunk-es"]
+    },
+    {
+      "id": "plat-zero-trust-identity",
+      "label": "Zero-trust identity loop",
+      "mode": "platform",
+      "description": "Duo MFA enforces at every access point. Identity verified against AD/IdP. SASE, Secure Endpoint, and XDR close the loop.",
+      "nodes": ["duo", "identity", "secure-access", "secure-endpoint", "cisco-xdr", "splunk-es"]
+    },
+    {
+      "id": "plat-soar-containment",
+      "label": "SOAR automated containment",
+      "mode": "platform",
+      "description": "Incident triggers SOAR playbook: isolate endpoint via Secure Endpoint, block at perimeter firewall, update XDR status.",
+      "nodes": ["splunk-es", "splunk-soar", "secure-endpoint", "fw-perimeter", "cisco-xdr", "talos"]
+    }
+  ]
+}

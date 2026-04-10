@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enterprise topology — sign-off preview</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="panel">
+        <header class="panel__head">
+          <h1>Master topology</h1>
+          <p class="muted">2:1 canvas · region-seeded layout + edge force · optional tile grid · up to 4 routes</p>
+        </header>
+
+        <section class="panel__section">
+          <h2>Display</h2>
+          <label class="check">
+            <input type="checkbox" id="toggle-grid" />
+            Show 12 × 5 tile grid
+          </label>
+          <label class="check">
+            <input type="checkbox" id="toggle-connectors" checked />
+            Show connectors
+          </label>
+          <label class="check">
+            <input type="checkbox" id="toggle-trust-zones" checked />
+            Show trust zones
+          </label>
+        </section>
+
+        <section class="panel__section">
+          <h2>Canvas</h2>
+          <p class="hint">Drag to pan · Scroll to zoom · Double-click to reset · Click a node to highlight neighbors</p>
+          <div class="btn-row">
+            <button type="button" id="btn-reset-view" class="btn btn--ghost">Reset view</button>
+          </div>
+        </section>
+
+        <section class="panel__section">
+          <h2>Routes <span id="route-counter" class="route-counter"></span></h2>
+          <p class="hint">Select up to <strong>four</strong> of twelve branches.</p>
+          <div class="btn-row">
+            <button type="button" id="btn-preset" class="btn">Cross-stack sample</button>
+            <button type="button" id="btn-clear-routes" class="btn btn--ghost">Clear</button>
+          </div>
+          <div id="route-groups" class="route-groups"></div>
+        </section>
+
+        <section class="panel__section">
+          <h2>Legend</h2>
+          <h3 class="legend-sub">Nodes</h3>
+          <ul class="legend legend--shapes" id="legend-shapes"></ul>
+          <h3 class="legend-sub">Edges</h3>
+          <ul class="legend legend--edges" id="legend-edges"></ul>
+          <h3 class="legend-sub">Active routes</h3>
+          <ul class="legend legend--routes" id="legend-routes"></ul>
+        </section>
+
+        <p class="footer-note muted">
+          Serve the <code>topology/</code> folder over HTTP (see README). React2Shell + SOW cross-check:
+          <code>topology/references/</code>
+        </p>
+      </aside>
+
+      <main class="canvas-wrap">
+        <div id="tooltip" class="tooltip" hidden></div>
+        <svg
+          id="topology-svg"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 120 60"
+          preserveAspectRatio="xMidYMid meet"
+          aria-label="Enterprise topology diagram"
+        >
+          <defs>
+            <filter id="route-glow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="0.35" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="zone-halo-glow" x="-25%" y="-25%" width="150%" height="150%">
+              <feGaussianBlur stdDeviation="0.35" result="zblur" />
+              <feMerge>
+                <feMergeNode in="zblur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="membrane-glow" x="-25%" y="-25%" width="150%" height="150%">
+              <feGaussianBlur stdDeviation="0.45" result="mblur" />
+              <feMerge>
+                <feMergeNode in="mblur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <rect class="svg-bg" x="0" y="0" width="120" height="60" />
+          <g id="layer-zone-halos"></g>
+          <g id="layer-grid"></g>
+          <g id="layer-trust-membranes"></g>
+          <g id="layer-base-edges"></g>
+          <g id="layer-edge-labels"></g>
+          <g id="layer-routes"></g>
+          <g id="layer-nodes"></g>
+          <g id="layer-node-labels"></g>
+        </svg>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

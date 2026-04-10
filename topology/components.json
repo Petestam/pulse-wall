@@ -1,0 +1,332 @@
+{
+  "id": "pulse-wall-enterprise-topology",
+  "name": "Enterprise Topology Master",
+  "purpose": "Concentric enterprise topology for 12×5 LED wall",
+  "references": {
+    "folder": "topology/references/",
+    "documents": [
+      {
+        "file": "Anatomy of an Attack — React2Shell.docx",
+        "role": "Attack path, ingress/lateral/crown narrative, node naming"
+      },
+      {
+        "file": "React2Shell.md",
+        "role": "Nine-step React2Shell attack flow (ADC → AI → IPS → Nexus → RCE → FW → XDR → ES)"
+      },
+      {
+        "file": "Pulse Wall SOW-Ext.docx",
+        "role": "Scope, modes, scenario counts, wall behavior"
+      }
+    ],
+    "note": "Reconcile labels and edges here plus routes in topology/routes.json before client sign-off."
+  },
+  "display": {
+    "canvas": { "widthUnits": 120, "heightUnits": 60, "aspectHint": "2:1 wall (e.g. 12x5 tiles)" },
+    "grid": { "cols": 12, "rows": 5, "note": "Optional overlay only; node positions are not locked to this grid." },
+    "layout": "concentric-trust",
+    "layoutModes": {
+      "concentric-trust": "Seed nodes in concentric trust rings and refine with constrained edge forces.",
+      "grid": "Use col/row from each node as tile centers (legacy / LED mapping)."
+    }
+  },
+  "styleGuide": {
+    "solid": "Primary network, service, or dependency connection",
+    "dashed": "Trust boundary, segmented relationship, or controlled handoff",
+    "dotted": "Telemetry, monitoring, or logical association",
+    "trustBoundary": "Edges with trustBoundary:true use an accent stroke + midLabel; zoneHalos tint trust zones and trustMembranes mark explicit crossings."
+  },
+  "zoneHalos": [
+    {
+      "id": "zone-core",
+      "ringId": "core",
+      "label": "Core Assets",
+      "padding": 1.6,
+      "rx": 1.6,
+      "fill": "rgba(34, 197, 94, 0.09)",
+      "stroke": "rgba(74, 222, 128, 0.24)"
+    },
+    {
+      "id": "zone-soc",
+      "ringId": "soc-platform",
+      "label": "SOC / Ops Platform",
+      "padding": 1.45,
+      "rx": 1.45,
+      "fill": "rgba(59, 130, 246, 0.08)",
+      "stroke": "rgba(96, 165, 250, 0.22)"
+    },
+    {
+      "id": "zone-app",
+      "ringId": "application",
+      "label": "Application Services",
+      "padding": 1.35,
+      "rx": 1.35,
+      "fill": "rgba(99, 102, 241, 0.075)",
+      "stroke": "rgba(129, 140, 248, 0.20)"
+    },
+    {
+      "id": "zone-enforcement",
+      "ringId": "network-enforcement",
+      "label": "Network & Security",
+      "padding": 1.35,
+      "rx": 1.35,
+      "fill": "rgba(239, 68, 68, 0.08)",
+      "stroke": "rgba(248, 113, 113, 0.22)"
+    },
+    {
+      "id": "zone-edge",
+      "ringId": "enterprise-edge",
+      "label": "Enterprise Edge",
+      "padding": 1.3,
+      "rx": 1.3,
+      "fill": "rgba(14, 165, 233, 0.075)",
+      "stroke": "rgba(56, 189, 248, 0.20)"
+    },
+    {
+      "id": "zone-external",
+      "ringId": "external",
+      "label": "External",
+      "padding": 1.2,
+      "rx": 1.2,
+      "fill": "rgba(148, 163, 184, 0.07)",
+      "stroke": "rgba(148, 163, 184, 0.20)"
+    }
+  ],
+  "trustMembranes": [
+    {
+      "id": "membrane-ai-backend",
+      "from": "ai",
+      "to": "backend",
+      "label": "Trust boundary",
+      "length": 5.2,
+      "thickness": 0.78,
+      "fill": "rgba(245, 158, 11, 0.24)",
+      "stroke": "rgba(245, 158, 11, 0.58)",
+      "strokeWidth": 0.12,
+      "strokeDasharray": "0.48 0.36",
+      "filter": "url(#membrane-glow)"
+    }
+  ],
+  "rings": [
+    {
+      "id": "core",
+      "label": "Core Assets",
+      "description": "Systems of record, identity authority, and highest-value enterprise assets",
+      "nodes": [
+        { "id": "identity",  "label": "Identity (AD / IdP)",     "type": "data",    "col": 5, "row": 2 },
+        { "id": "core-data", "label": "Core Data",               "type": "data",    "col": 6, "row": 2 },
+        { "id": "business",  "label": "Business Systems",        "type": "service", "col": 5, "row": 3 },
+        { "id": "crown",     "label": "Crown Jewel Assets",      "type": "data",    "col": 6, "row": 3 }
+      ]
+    },
+    {
+      "id": "soc-platform",
+      "label": "SOC / Operations Platform",
+      "description": "Splunk and Cisco analytics brain — consumes telemetry from all rings, drives response",
+      "nodes": [
+        { "id": "splunk-es",  "label": "Splunk Enterprise Security", "type": "platform", "col": 4, "row": 2 },
+        { "id": "splunk-obs", "label": "Splunk Observability Cloud", "type": "platform", "col": 7, "row": 2 },
+        { "id": "cisco-xdr",  "label": "Cisco XDR",                  "type": "platform", "col": 4, "row": 3 },
+        { "id": "splunk-soar","label": "Splunk SOAR",                "type": "platform", "col": 7, "row": 3 },
+        { "id": "fabric",     "label": "Splunk Federated Search",         "type": "platform", "col": 5, "row": 1 },
+        { "id": "talos",      "label": "Cisco Talos Intelligence",   "type": "platform", "col": 6, "row": 1 }
+      ]
+    },
+    {
+      "id": "application",
+      "label": "Application Services",
+      "description": "Application, API, AI, and compute tiers",
+      "nodes": [
+        { "id": "web",       "label": "Customer Web + AI Chat", "type": "service", "col": 3, "row": 1 },
+        { "id": "api",       "label": "API Gateway",         "type": "service", "col": 8, "row": 1 },
+        { "id": "app",       "label": "App Services",        "type": "service", "col": 4, "row": 4 },
+        { "id": "backend",   "label": "Backend Services",    "type": "service", "col": 8, "row": 4 },
+        { "id": "dc",        "label": "Data Center",         "type": "server",  "col": 5, "row": 4 },
+        { "id": "cloud-compute", "label": "Cloud Compute",   "type": "server",  "col": 7, "row": 4 },
+        { "id": "ai",        "label": "AI / ML Services",    "type": "service", "col": 8, "row": 3 },
+        { "id": "email",     "label": "Cisco Secure Email",  "type": "security","col": 3, "row": 2 }
+      ]
+    },
+    {
+      "id": "network-enforcement",
+      "label": "Network & Security Enforcement",
+      "description": "Inline controls, detection, identity enforcement, and telemetry collection",
+      "nodes": [
+        { "id": "fw-perimeter", "label": "Cisco Secure Firewall (Perimeter)", "type": "security", "col": 2, "row": 1 },
+        { "id": "fw-internal",  "label": "Cisco Secure Firewall (Internal)",  "type": "security", "col": 2, "row": 4 },
+        { "id": "umbrella",     "label": "Cisco Umbrella",                    "type": "security", "col": 9, "row": 1 },
+        { "id": "secure-access","label": "Cisco Secure Access (SASE)",        "type": "security", "col": 1, "row": 3 },
+        { "id": "duo",          "label": "Cisco Duo (MFA)",                   "type": "security", "col": 4, "row": 1 },
+        { "id": "secure-endpoint","label": "Cisco Secure Endpoint",           "type": "security", "col": 9, "row": 4 },
+        { "id": "sna",          "label": "Cisco Secure Network Analytics",    "type": "security", "col": 9, "row": 2 },
+        { "id": "ai-defense",   "label": "Cisco AI Defense",                  "type": "security", "col": 9, "row": 3 },
+        { "id": "sdwan",        "label": "Cisco Catalyst SD-WAN",             "type": "network",  "col": 2, "row": 3 },
+        { "id": "otel",         "label": "OTel Collectors",                   "type": "network",  "col": 7, "row": 1 },
+        { "id": "adc",          "label": "L7 Ingress / Load Balancer",        "type": "network",  "col": 2, "row": 0 },
+        { "id": "ips",          "label": "Cisco Secure IPS",                  "type": "security", "col": 6, "row": 4 },
+        { "id": "nexus",        "label": "Cisco Nexus 9000",                  "type": "network",  "col": 5, "row": 5 },
+        { "id": "app-server",   "label": "Application Server (React SSR)",    "type": "server",   "col": 6, "row": 5 }
+      ]
+    },
+    {
+      "id": "enterprise-edge",
+      "label": "Enterprise Edge",
+      "description": "Campus, branch, remote sites, endpoints, and cloud",
+      "nodes": [
+        { "id": "campus",       "label": "Campus Network",     "type": "network",   "col": 1, "row": 2 },
+        { "id": "branch",       "label": "Branch Office",      "type": "network",   "col": 2, "row": 5 },
+        { "id": "remote-sites", "label": "Remote Sites",       "type": "network",   "col": 9, "row": 5 },
+        { "id": "managed-ep",   "label": "Managed Endpoints",  "type": "endpoint",  "col": 3, "row": 0 },
+        { "id": "byod",         "label": "BYOD / Unmanaged",   "type": "endpoint",  "col": 4, "row": 0 },
+        { "id": "iot-ot",       "label": "Cisco IoT / Industrial","type": "endpoint","col": 8, "row": 0 },
+        { "id": "edge-devices", "label": "Edge Compute / Kiosks","type": "endpoint", "col": 3, "row": 5 },
+        { "id": "multi-cloud",  "label": "Hybrid / Multi-Cloud","type": "network",   "col": 8, "row": 5 },
+        { "id": "dmz",          "label": "DMZ / Ingress",       "type": "network",   "col": 1, "row": 1 }
+      ]
+    },
+    {
+      "id": "external",
+      "label": "External",
+      "description": "Users, partners, SaaS, and external threats at the perimeter",
+      "nodes": [
+        { "id": "internet-users", "label": "Internet Users",      "type": "external", "col": 0, "row": 1 },
+        { "id": "remote-users",   "label": "Remote / Mobile Users","type": "external", "col": 0, "row": 3 },
+        { "id": "partners",       "label": "Partners / B2B",      "type": "external", "col": 11, "row": 2 },
+        { "id": "saas",           "label": "SaaS Providers",      "type": "external", "col": 11, "row": 3 },
+        { "id": "threats",        "label": "Threat Infrastructure","type": "external", "col": 10, "row": 0 },
+        { "id": "threat-email",   "label": "Phishing / BEC",      "type": "external", "col": 0, "row": 2 }
+      ]
+    }
+  ],
+  "edges": [
+
+    { "from": "internet-users", "to": "dmz",            "style": "solid" },
+    { "from": "internet-users", "to": "umbrella",       "style": "solid" },
+    { "from": "remote-users",   "to": "secure-access",  "style": "solid" },
+    { "from": "threat-email",   "to": "email",          "style": "dashed" },
+    { "from": "threats",        "to": "dmz",            "style": "dashed" },
+    { "from": "threats",        "to": "umbrella",       "style": "dashed" },
+    { "from": "partners",       "to": "api",            "style": "solid" },
+    { "from": "saas",           "to": "multi-cloud",    "style": "solid" },
+
+    { "from": "dmz",            "to": "fw-perimeter",   "style": "solid" },
+    { "from": "fw-perimeter",   "to": "adc",            "style": "solid" },
+    { "from": "adc",            "to": "web",            "style": "solid" },
+    { "from": "umbrella",       "to": "web",            "style": "solid" },
+    { "from": "umbrella",       "to": "api",            "style": "solid" },
+    { "from": "secure-access",  "to": "sdwan",          "style": "solid" },
+    { "from": "secure-access",  "to": "app",            "style": "solid" },
+
+    { "from": "campus",         "to": "fw-perimeter",   "style": "solid" },
+    { "from": "campus",         "to": "web",            "style": "solid" },
+    { "from": "sdwan",          "to": "branch",         "style": "solid" },
+    { "from": "sdwan",          "to": "remote-sites",   "style": "solid" },
+    { "from": "sdwan",          "to": "app",            "style": "solid" },
+
+    { "from": "managed-ep",     "to": "campus",         "style": "solid" },
+    { "from": "byod",           "to": "campus",         "style": "dashed" },
+    { "from": "iot-ot",         "to": "remote-sites",   "style": "solid" },
+    { "from": "edge-devices",   "to": "branch",         "style": "solid" },
+    { "from": "multi-cloud",    "to": "cloud-compute",  "style": "solid" },
+
+    { "from": "web",            "to": "api",            "style": "solid" },
+    { "from": "api",            "to": "backend",        "style": "solid" },
+    { "from": "app",            "to": "backend",        "style": "solid" },
+    { "from": "backend",        "to": "dc",             "style": "solid" },
+    { "from": "backend",        "to": "cloud-compute",  "style": "solid" },
+    { "from": "web",            "to": "ai",             "style": "solid" },
+    {
+      "from": "ai",
+      "to": "backend",
+      "style": "dashed",
+      "trustBoundary": true,
+      "midLabel": "Trust boundary · payload downstream"
+    },
+    { "from": "backend",        "to": "ips",            "style": "solid" },
+    { "from": "ips",            "to": "app-server",     "style": "solid" },
+    { "from": "backend",        "to": "app",            "style": "solid" },
+    { "from": "app",            "to": "app-server",     "style": "solid" },
+    { "from": "app-server",     "to": "fw-perimeter",   "style": "solid" },
+    { "from": "fw-perimeter",   "to": "threats",        "style": "dashed" },
+    { "from": "app-server",     "to": "cisco-xdr",      "style": "dotted" },
+    { "from": "app-server",     "to": "secure-endpoint","style": "dotted" },
+    { "from": "backend",        "to": "nexus",          "style": "solid" },
+    { "from": "app",            "to": "nexus",          "style": "solid" },
+    { "from": "app-server",     "to": "nexus",          "style": "solid" },
+    { "from": "email",          "to": "app",            "style": "solid" },
+
+    { "from": "dc",             "to": "identity",       "style": "solid" },
+    { "from": "dc",             "to": "core-data",      "style": "solid" },
+    { "from": "cloud-compute",  "to": "core-data",      "style": "solid" },
+    { "from": "identity",       "to": "business",       "style": "solid" },
+    { "from": "core-data",      "to": "business",       "style": "solid" },
+    { "from": "business",       "to": "crown",          "style": "solid" },
+
+    { "from": "duo",            "to": "identity",       "style": "solid" },
+    { "from": "duo",            "to": "web",            "style": "dashed" },
+    { "from": "duo",            "to": "secure-access",  "style": "dashed" },
+    { "from": "fw-internal",    "to": "dc",             "style": "solid" },
+    { "from": "fw-internal",    "to": "app",            "style": "dashed" },
+
+    { "from": "managed-ep",     "to": "secure-endpoint","style": "dotted" },
+    { "from": "byod",           "to": "secure-endpoint","style": "dotted" },
+    { "from": "iot-ot",         "to": "sna",            "style": "dotted" },
+    { "from": "campus",         "to": "sna",            "style": "dotted" },
+    { "from": "sdwan",          "to": "sna",            "style": "dotted" },
+
+    { "from": "ai",             "to": "ai-defense",     "style": "dotted" },
+    { "from": "ai-defense",     "to": "cisco-xdr",      "style": "dotted" },
+    { "from": "ai-defense",     "to": "splunk-es",      "style": "dotted" },
+
+    { "from": "web",            "to": "otel",           "style": "dotted" },
+    { "from": "api",            "to": "otel",           "style": "dotted" },
+    { "from": "app",            "to": "otel",           "style": "dotted" },
+    { "from": "backend",        "to": "otel",           "style": "dotted" },
+    { "from": "ai",             "to": "otel",           "style": "dotted" },
+    { "from": "dc",             "to": "otel",           "style": "dotted" },
+    { "from": "cloud-compute",  "to": "otel",           "style": "dotted" },
+    { "from": "app-server",     "to": "otel",           "style": "dotted" },
+    { "from": "otel",           "to": "splunk-obs",     "style": "dotted" },
+
+    { "from": "adc",            "to": "splunk-es",      "style": "dotted" },
+    { "from": "ips",            "to": "splunk-es",      "style": "dotted" },
+    { "from": "nexus",          "to": "splunk-es",      "style": "dotted" },
+    { "from": "app-server",     "to": "splunk-es",      "style": "dotted" },
+    { "from": "fw-perimeter",   "to": "splunk-es",      "style": "dotted" },
+    { "from": "fw-internal",    "to": "splunk-es",      "style": "dotted" },
+    { "from": "umbrella",       "to": "splunk-es",      "style": "dotted" },
+    { "from": "email",          "to": "splunk-es",      "style": "dotted" },
+    { "from": "secure-endpoint","to": "cisco-xdr",      "style": "dotted" },
+    { "from": "sna",            "to": "cisco-xdr",      "style": "dotted" },
+    { "from": "secure-access",  "to": "cisco-xdr",      "style": "dotted" },
+    { "from": "cisco-xdr",      "to": "splunk-es",      "style": "dotted" },
+    { "from": "talos",          "to": "splunk-es",      "style": "dotted" },
+    { "from": "talos",          "to": "cisco-xdr",      "style": "dotted" },
+
+    { "from": "splunk-es",      "to": "fabric",         "style": "dotted" },
+    { "from": "splunk-obs",     "to": "fabric",         "style": "dotted" },
+    { "from": "splunk-soar",    "to": "splunk-es",      "style": "dotted" },
+    { "from": "splunk-soar",    "to": "cisco-xdr",      "style": "dotted" },
+    { "from": "splunk-soar",    "to": "fw-perimeter",   "style": "dashed" },
+    { "from": "splunk-soar",    "to": "secure-endpoint","style": "dashed" },
+    { "from": "splunk-soar",    "to": "talos",          "style": "dotted" },
+
+    { "from": "email",          "to": "managed-ep",     "style": "dashed" },
+    { "from": "campus",         "to": "app",            "style": "solid" },
+    { "from": "app",            "to": "dc",             "style": "solid" },
+    { "from": "remote-users",   "to": "duo",            "style": "dashed" },
+    { "from": "secure-access",  "to": "identity",       "style": "dashed" },
+    { "from": "identity",       "to": "cisco-xdr",      "style": "dotted" },
+    { "from": "sna",            "to": "app",            "style": "dotted" },
+    { "from": "business",       "to": "otel",           "style": "dotted" },
+    { "from": "fw-perimeter",   "to": "umbrella",       "style": "solid" },
+    { "from": "umbrella",       "to": "secure-endpoint","style": "dotted" },
+    { "from": "secure-endpoint","to": "sna",            "style": "dotted" },
+    { "from": "api",            "to": "app",            "style": "solid" },
+    { "from": "fabric",         "to": "sna",            "style": "dotted" },
+    { "from": "sna",            "to": "splunk-es",      "style": "dotted" },
+    { "from": "identity",       "to": "secure-access",  "style": "dashed" },
+    { "from": "secure-access",  "to": "secure-endpoint","style": "dotted" },
+    { "from": "secure-endpoint","to": "fw-perimeter",   "style": "dashed" },
+    { "from": "fw-perimeter",   "to": "cisco-xdr",      "style": "dotted" }
+  ]
+}
