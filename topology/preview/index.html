@@ -32,10 +32,58 @@
 
         <section class="panel__section">
           <h2>Canvas</h2>
-          <p class="hint">Drag to pan · Scroll to zoom · Double-click to reset · Click a node to highlight neighbors</p>
+          <p class="hint">Drag background to pan · Scroll to zoom · Double-click to fit · Click a node to highlight neighbors</p>
           <div class="btn-row">
             <button type="button" id="btn-reset-view" class="btn btn--ghost">Reset view</button>
           </div>
+        </section>
+
+        <section class="panel__section panel__section--editor">
+          <h2>Edit topology</h2>
+          <label class="check">
+            <input type="checkbox" id="toggle-edit-mode" />
+            Enable editing (drag nodes, add edges, palette)
+          </label>
+          <p class="hint muted">
+            Pan the canvas by dragging empty space. Drag nodes to move. Export saves positions as
+            <code>x</code>/<code>y</code> in <code>components.json</code> (download).
+          </p>
+          <div class="btn-row">
+            <button type="button" id="btn-edge-mode" class="btn btn--ghost" disabled>Add edge…</button>
+            <button type="button" id="btn-relayout" class="btn btn--ghost" disabled>Re-run auto layout</button>
+          </div>
+          <p id="edge-mode-hint" class="hint muted" hidden></p>
+          <div id="add-edge-panel" class="add-edge-panel" hidden>
+            <label class="field">
+              <span>Style</span>
+              <select id="new-edge-style">
+                <option value="solid">Solid</option>
+                <option value="dashed">Dashed</option>
+                <option value="dotted">Dotted</option>
+              </select>
+            </label>
+            <label class="check check--inline">
+              <input type="checkbox" id="new-edge-trust" />
+              Trust boundary (accent + optional mid-label)
+            </label>
+            <label class="field">
+              <span>Mid label (optional)</span>
+              <input type="text" id="new-edge-midlabel" placeholder="e.g. Trust boundary · …" />
+            </label>
+            <div class="btn-row">
+              <button type="button" id="btn-add-edge-confirm" class="btn">Add connection</button>
+              <button type="button" id="btn-add-edge-cancel" class="btn btn--ghost">Cancel</button>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button type="button" id="btn-export-json" class="btn" disabled>Download components.json</button>
+          </div>
+        </section>
+
+        <section class="panel__section">
+          <h2>Component palette</h2>
+          <p class="hint muted">Drag a template onto the canvas, or click Place then click the diagram.</p>
+          <div id="palette" class="palette"></div>
         </section>
 
         <section class="panel__section">

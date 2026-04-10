@@ -303,3 +303,91 @@ body {
     min-height: min(65svh, 700px);
   }
 }
+
+.panel__section--editor .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.panel__section--editor .field span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.panel__section--editor select,
+.panel__section--editor input[type="text"] {
+  padding: 0.35rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #1a2330;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.check--inline {
+  margin-bottom: 0.5rem;
+}
+
+.add-edge-panel {
+  margin-top: 0.5rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(15, 20, 28, 0.5);
+}
+
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  cursor: grab;
+  color: var(--muted);
+  background: rgba(15, 20, 28, 0.4);
+  user-select: none;
+}
+
+.palette-item:active {
+  cursor: grabbing;
+}
+
+.palette-item kbd {
+  font-size: 0.65rem;
+  opacity: 0.75;
+}
+
+#topology-svg.edit-mode {
+  cursor: default;
+}
+
+#topology-svg.edit-mode .topology-node-group {
+  cursor: grab;
+}
+
+#topology-svg.edit-mode .topology-node-group.dragging {
+  cursor: grabbing;
+}
+
+#topology-svg.place-pending {
+  cursor: crosshair;
+}
+
+.btn.btn--active {
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.12);
+}

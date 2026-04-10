@@ -51,6 +51,18 @@
   let selectedRouteIds = [];
   const MAX_ROUTES = 4;
 
+  /** Edit mode: drag nodes, add/remove edges, palette, export JSON. */
+  let editMode = false;
+  let edgePairingMode = false;
+  /** @type {string | null} */
+  let edgeFromId = null;
+  /** @type {string | null} */
+  let draggingNodeId = null;
+  /** @type {{ type: string, ringId: string, label: string } | null} */
+  let placePalettePending = null;
+  /** @type {{ from: string, to: string } | null} */
+  let pendingEdge = null;
+
   const NS = "http://www.w3.org/2000/svg";
 
   /** Primitive shape kinds (visual only; node `type` maps into these). */
@@ -131,6 +143,9 @@
   function nodePos(node) {
     if (typeof node.layoutX === "number" && typeof node.layoutY === "number") {
       return { x: node.layoutX, y: node.layoutY };
+    }
+    if (typeof node.x === "number" && typeof node.y === "number") {
+      return { x: node.x, y: node.y };
     }
     return {
       x: node.col * CELL + CELL / 2,
@@ -381,10 +396,73 @@
     resolveNodeCollisions(nodes, 28);
   }
 
+  function findRingNodeRecord(nodeId) {
+    if (!components || !components.rings) return null;
+    for (const ring of components.rings) {
+      const node = (ring.nodes || []).find((n) => n.id === nodeId);
+      if (node) return { ring, node };
+    }
+    return null;
+  }
+
+  function hasAnySavedPositions(data) {
+    if (!data || !data.rings) return false;
+    for (const ring of data.rings) {
+      for (const n of ring.nodes || []) {
+        if (typeof n.x === "number" && typeof n.y === "number") return true;
+      }
+    }
+    return false;
+  }
+
+  function shouldSkipForceLayout(data) {
+    const d = data.display || {};
+    if (d.layout === "interactive" && d.useSavedPositions && hasAnySavedPositions(data)) {
+      return true;
+    }
+    return false;
+  }
+
+  function applySavedPositionsToMap() {
+    for (const node of nodeMap.values()) {
+      const found = findRingNodeRecord(node.id);
+      if (found && typeof found.node.x === "number" && typeof found.node.y === "number") {
+        node.layoutX = found.node.x;
+        node.layoutY = found.node.y;
+        node.layoutRadius = estimatedNodeRadius(node);
+      }
+    }
+  }
+
+  function syncAllPositionsToRingData() {
+    for (const node of nodeMap.values()) {
+      if (typeof node.layoutX !== "number" || typeof node.layoutY !== "number") continue;
+      const found = findRingNodeRecord(node.id);
+      if (found) {
+        found.node.x = node.layoutX;
+        found.node.y = node.layoutY;
+      }
+    }
+  }
+
   function applyGraphLayout(data) {
     if (!data || !data.edges) return;
+    const d = data.display || {};
+    if (d.layout === "grid") {
+      for (const node of nodeMap.values()) {
+        node.layoutX = node.col * CELL + CELL / 2;
+        node.layoutY = node.row * CELL + CELL / 2;
+        node.layoutRadius = estimatedNodeRadius(node);
+      }
+      return;
+    }
+    if (shouldSkipForceLayout(data)) {
+      applySavedPositionsToMap();
+      return;
+    }
     seedConcentricPositions(nodeMap);
     runForceLayout(nodeMap, data.edges);
+    syncAllPositionsToRingData();
   }
 
   function svgPoint(clientX, clientY) {
@@ -470,11 +548,16 @@
     nodeMap = new Map();
     for (const ring of data.rings) {
       for (const n of ring.nodes) {
-        nodeMap.set(n.id, {
+        const merged = {
           ...n,
           ringId: ring.id,
           ringLabel: ring.label,
-        });
+        };
+        if (typeof n.x === "number" && typeof n.y === "number") {
+          merged.layoutX = n.x;
+          merged.layoutY = n.y;
+        }
+        nodeMap.set(n.id, merged);
       }
     }
   }
@@ -677,16 +760,20 @@
     }
   }
 
+  /** @type {number | null} */
+  let selectedEdgeIndex = null;
+
   function renderBaseEdges() {
     const g = document.getElementById("layer-base-edges");
     const gLabels = document.getElementById("layer-edge-labels");
     if (!g || !components) return;
     g.innerHTML = "";
     if (gLabels) gLabels.innerHTML = "";
-    for (const edge of components.edges) {
+    const edges = components.edges || [];
+    edges.forEach((edge, edgeIndex) => {
       const a = nodeMap.get(edge.from);
       const b = nodeMap.get(edge.to);
-      if (!a || !b) continue;
+      if (!a || !b) return;
       const pa = nodePos(a);
       const pb = nodePos(b);
       const line = document.createElementNS(
@@ -712,6 +799,12 @@
       line.setAttribute("class", isTrust ? "base-edge edge-trust-boundary" : "base-edge");
       line.dataset.from = edge.from;
       line.dataset.to = edge.to;
+      line.dataset.edgeIndex = String(edgeIndex);
+      if (editMode && selectedEdgeIndex === edgeIndex) {
+        line.setAttribute("stroke", "#38bdf8");
+        line.setAttribute("stroke-opacity", "1");
+      }
+      line.setAttribute("pointer-events", editMode ? "none" : "visiblePainted");
       line.addEventListener("mouseenter", (e) => {
         const aNode = nodeMap.get(edge.from);
         const bNode = nodeMap.get(edge.to);
@@ -724,6 +817,27 @@
       line.addEventListener("mousemove", moveTooltip);
       line.addEventListener("mouseleave", hideTooltip);
       g.appendChild(line);
+
+      if (editMode) {
+        const hit = document.createElementNS(NS, "line");
+        hit.setAttribute("x1", String(pa.x));
+        hit.setAttribute("y1", String(pa.y));
+        hit.setAttribute("x2", String(pb.x));
+        hit.setAttribute("y2", String(pb.y));
+        hit.setAttribute("stroke", "transparent");
+        hit.setAttribute("stroke-width", "1.6");
+        hit.setAttribute("pointer-events", "stroke");
+        hit.setAttribute("class", "base-edge-hit");
+        hit.dataset.edgeIndex = String(edgeIndex);
+        hit.addEventListener("click", (e) => {
+          if (!editMode) return;
+          e.stopPropagation();
+          e.preventDefault();
+          selectedEdgeIndex = edgeIndex;
+          redrawStatic();
+        });
+        g.appendChild(hit);
+      }
 
       if (gLabels && edge.midLabel) {
         const mx = (pa.x + pb.x) / 2;
@@ -746,7 +860,7 @@
         text.textContent = edge.midLabel;
         gLabels.appendChild(text);
       }
-    }
+    });
   }
 
   function renderRoutes() {
@@ -1006,6 +1120,120 @@
     return appendShapeForKind(g, shapeKindForType(type), fill, stroke);
   }
 
+  let nodeDragMoved = false;
+
+  function syncEdgeModeButton() {
+    const btn = document.getElementById("btn-edge-mode");
+    if (!btn) return;
+    btn.classList.toggle("btn--active", edgePairingMode);
+    btn.textContent = edgePairingMode ? "Cancel edge…" : "Add edge…";
+  }
+
+  function updateEdgeHint() {
+    const el = document.getElementById("edge-mode-hint");
+    if (!el) return;
+    if (!edgePairingMode) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    if (pendingEdge) {
+      el.textContent = "Style the connection below, then Add connection or Cancel.";
+      return;
+    }
+    if (!edgeFromId) el.textContent = "Click the first node…";
+    else el.textContent = "Click the second node…";
+  }
+
+  function handleNodeClickForEdge(nodeId) {
+    if (!edgeFromId) {
+      edgeFromId = nodeId;
+      updateEdgeHint();
+      return;
+    }
+    if (edgeFromId === nodeId) {
+      edgeFromId = null;
+      updateEdgeHint();
+      return;
+    }
+    pendingEdge = { from: edgeFromId, to: nodeId };
+    edgeFromId = null;
+    const panel = document.getElementById("add-edge-panel");
+    if (panel) panel.hidden = false;
+    updateEdgeHint();
+  }
+
+  function syncRingNodeXY(nodeId) {
+    const node = nodeMap.get(nodeId);
+    const found = findRingNodeRecord(nodeId);
+    if (node && found && typeof node.layoutX === "number" && typeof node.layoutY === "number") {
+      found.node.x = node.layoutX;
+      found.node.y = node.layoutY;
+      if (editMode && components) {
+        components.display = components.display || {};
+        components.display.layout = "interactive";
+        components.display.useSavedPositions = true;
+      }
+    }
+  }
+
+  function startNodeDrag(e, nodeId) {
+    const node = nodeMap.get(nodeId);
+    if (!node || !svg) return;
+    const grp = e.currentTarget;
+    draggingNodeId = nodeId;
+    grp.classList.add("dragging");
+    const startPt = svgPoint(e.clientX, e.clientY);
+    const pos = nodePos(node);
+    const ox = typeof node.layoutX === "number" ? node.layoutX : pos.x;
+    const oy = typeof node.layoutY === "number" ? node.layoutY : pos.y;
+    node.layoutX = ox;
+    node.layoutY = oy;
+    node.layoutRadius = estimatedNodeRadius(node);
+    nodeDragMoved = false;
+    let dragRaf = null;
+
+    const onMove = (ev) => {
+      const cur = svgPoint(ev.clientX, ev.clientY);
+      if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) > 3) nodeDragMoved = true;
+      const dx = cur.x - startPt.x;
+      const dy = cur.y - startPt.y;
+      node.layoutX = ox + dx;
+      node.layoutY = oy + dy;
+      clampNodeToCanvas(node);
+      node.layoutRadius = estimatedNodeRadius(node);
+      syncRingNodeXY(nodeId);
+      if (dragRaf) cancelAnimationFrame(dragRaf);
+      dragRaf = requestAnimationFrame(() => {
+        renderNodes();
+        renderBaseEdges();
+        renderTrustMembranes();
+        renderRoutes();
+        renderZoneHalos();
+        dragRaf = null;
+      });
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      draggingNodeId = null;
+      document
+        .querySelector(`[data-node-id="${CSS.escape(nodeId)}"]`)
+        ?.classList.remove("dragging");
+      syncRingNodeXY(nodeId);
+      renderNodes();
+      renderBaseEdges();
+      renderTrustMembranes();
+      renderRoutes();
+      renderZoneHalos();
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   function renderNodes() {
     const gShapes = document.getElementById("layer-nodes");
     const gLabels = document.getElementById("layer-node-labels");
@@ -1029,7 +1257,23 @@
       grp.addEventListener("mouseenter", (e) => showTooltip(e, node, p.x, p.y));
       grp.addEventListener("mousemove", moveTooltip);
       grp.addEventListener("mouseleave", hideTooltip);
-      grp.addEventListener("click", () => toggleNodeFocus(node.id));
+      grp.addEventListener("click", (ev) => {
+        if (editMode && edgePairingMode) {
+          ev.stopPropagation();
+          handleNodeClickForEdge(node.id);
+          return;
+        }
+        if (nodeDragMoved) {
+          nodeDragMoved = false;
+          return;
+        }
+        toggleNodeFocus(node.id);
+      });
+      grp.addEventListener("mousedown", (ev) => {
+        if (!editMode) return;
+        ev.stopPropagation();
+        startNodeDrag(ev, node.id);
+      });
 
       gShapes.appendChild(grp);
 
@@ -1137,6 +1381,19 @@
         });
       }
     }
+  }
+
+  function clearNodeFocus() {
+    focusedNodeId = null;
+    document.querySelectorAll(".topology-node-group").forEach((g) => {
+      g.style.opacity = "";
+    });
+    document.querySelectorAll(".base-edge").forEach((line) => {
+      line.style.opacity = "";
+    });
+    document.querySelectorAll(".node-label").forEach((lbl) => {
+      lbl.style.opacity = "";
+    });
   }
 
   const tooltipEl = document.getElementById("tooltip");
@@ -1302,6 +1559,8 @@
     if (layoutMode !== "grid") {
       applyGraphLayout(components);
     }
+    if (svg) svg.classList.toggle("edit-mode", editMode);
+    if (svg) svg.classList.toggle("place-pending", Boolean(placePalettePending));
     renderGrid(document.getElementById("toggle-grid")?.checked ?? false);
     renderZoneHalos();
     renderTrustMembranes();
@@ -1310,6 +1569,251 @@
     renderLegendEdges();
     renderLegendShapes();
     renderRoutes();
+  }
+
+  function setEditorUiEnabled(on) {
+    for (const id of ["btn-edge-mode", "btn-relayout", "btn-export-json"]) {
+      const b = document.getElementById(id);
+      if (b) b.disabled = !on;
+    }
+  }
+
+  function addNodeAt(ringId, type, label, x, y) {
+    if (!components || !components.rings) return;
+    const ring = components.rings.find((r) => r.id === ringId);
+    if (!ring) return;
+    const id = `node-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const cell = { col: Math.floor(x / CELL), row: Math.floor(y / CELL) };
+    const node = {
+      id,
+      label: label || "New",
+      type: type || "service",
+      col: clamp(cell.col, 0, 11),
+      row: clamp(cell.row, 0, 4),
+      x,
+      y,
+    };
+    if (!ring.nodes) ring.nodes = [];
+    ring.nodes.push(node);
+    components.display = components.display || {};
+    components.display.layout = "interactive";
+    components.display.useSavedPositions = true;
+    buildNodeMap(components);
+    applyGraphLayout(components);
+    redrawStatic();
+    fitViewToExtents();
+  }
+
+  function exportComponentsJson() {
+    if (!components) return;
+    syncAllPositionsToRingData();
+    const out = JSON.parse(JSON.stringify(components));
+    out.display = out.display || {};
+    out.display.layout = "interactive";
+    out.display.useSavedPositions = true;
+    for (const ring of out.rings || []) {
+      for (const n of ring.nodes || []) {
+        const nm = nodeMap.get(n.id);
+        if (nm && typeof nm.layoutX === "number" && typeof nm.layoutY === "number") {
+          n.x = nm.layoutX;
+          n.y = nm.layoutY;
+        }
+      }
+    }
+    const blob = new Blob([JSON.stringify(out, null, 2)], {
+      type: "application/json",
+    });
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = "components.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function relayoutFromScratch() {
+    if (!components || !components.rings) return;
+    for (const ring of components.rings) {
+      for (const n of ring.nodes || []) {
+        delete n.x;
+        delete n.y;
+      }
+    }
+    components.display = components.display || {};
+    components.display.layout = "concentric-trust";
+    delete components.display.useSavedPositions;
+    selectedEdgeIndex = null;
+    pendingEdge = null;
+    edgePairingMode = false;
+    edgeFromId = null;
+    const panel = document.getElementById("add-edge-panel");
+    if (panel) panel.hidden = true;
+    syncEdgeModeButton();
+    updateEdgeHint();
+    buildNodeMap(components);
+    applyGraphLayout(components);
+    redrawStatic();
+    fitViewToExtents();
+  }
+
+  function deleteSelectedEdge() {
+    if (selectedEdgeIndex === null || !components || !components.edges) return;
+    const ix = selectedEdgeIndex;
+    if (ix < 0 || ix >= components.edges.length) return;
+    components.edges.splice(ix, 1);
+    selectedEdgeIndex = null;
+    redrawStatic();
+  }
+
+  function cancelAddEdgePanel() {
+    pendingEdge = null;
+    const panel = document.getElementById("add-edge-panel");
+    if (panel) panel.hidden = true;
+    edgeFromId = null;
+    updateEdgeHint();
+  }
+
+  function confirmAddEdgeFromPanel() {
+    if (!pendingEdge || !components) return;
+    if (!components.edges) components.edges = [];
+    const styleSel = document.getElementById("new-edge-style");
+    const trustCb = document.getElementById("new-edge-trust");
+    const midInput = document.getElementById("new-edge-midlabel");
+    const style = (styleSel && styleSel.value) || "solid";
+    const trust = trustCb && trustCb.checked;
+    const midLabel = (midInput && midInput.value.trim()) || "";
+    const edge = {
+      from: pendingEdge.from,
+      to: pendingEdge.to,
+      style,
+    };
+    if (trust) edge.trustBoundary = true;
+    if (midLabel) edge.midLabel = midLabel;
+    components.edges.push(edge);
+    pendingEdge = null;
+    const panel = document.getElementById("add-edge-panel");
+    if (panel) panel.hidden = true;
+    edgeFromId = null;
+    updateEdgeHint();
+    redrawStatic();
+  }
+
+  const PALETTE_TEMPLATES = [
+    { type: "endpoint", ringId: "application", label: "Endpoint" },
+    { type: "service", ringId: "application", label: "Service" },
+    { type: "security", ringId: "network-enforcement", label: "New control" },
+    { type: "network", ringId: "network-enforcement", label: "Network path" },
+    { type: "platform", ringId: "soc-platform", label: "Platform" },
+    { type: "data", ringId: "core", label: "Data asset" },
+    { type: "external", ringId: "external", label: "External" },
+  ];
+
+  function initPalette() {
+    const host = document.getElementById("palette");
+    if (!host) return;
+    host.innerHTML = "";
+    for (const tpl of PALETTE_TEMPLATES) {
+      const el = document.createElement("div");
+      el.className = "palette-item";
+      el.setAttribute("draggable", "true");
+      el.dataset.ringId = tpl.ringId;
+      el.dataset.type = tpl.type;
+      el.dataset.label = tpl.label;
+      el.innerHTML = `<span>${escapeHtml(tpl.label)}</span> <kbd>${escapeHtml(tpl.type)}</kbd>`;
+      el.addEventListener("dragstart", (e) => {
+        if (!editMode) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.setData(
+          "application/json",
+          JSON.stringify({
+            type: tpl.type,
+            ringId: tpl.ringId,
+            label: tpl.label,
+          })
+        );
+        e.dataTransfer.effectAllowed = "copy";
+      });
+      el.addEventListener("click", (e) => {
+        if (!editMode) return;
+        e.preventDefault();
+        placePalettePending = {
+          type: tpl.type,
+          ringId: tpl.ringId,
+          label: tpl.label,
+        };
+        redrawStatic();
+      });
+      host.appendChild(el);
+    }
+  }
+
+  function initEditor() {
+    initPalette();
+    const toggleEdit = document.getElementById("toggle-edit-mode");
+    if (toggleEdit) {
+      toggleEdit.addEventListener("change", (e) => {
+        editMode = /** @type {HTMLInputElement} */ (e.target).checked;
+        setEditorUiEnabled(editMode);
+        if (!editMode) {
+          edgePairingMode = false;
+          edgeFromId = null;
+          pendingEdge = null;
+          placePalettePending = null;
+          const panel = document.getElementById("add-edge-panel");
+          if (panel) panel.hidden = true;
+          syncEdgeModeButton();
+          updateEdgeHint();
+        }
+        redrawStatic();
+      });
+    }
+    setEditorUiEnabled(false);
+
+    document.getElementById("btn-edge-mode")?.addEventListener("click", () => {
+      if (!editMode) return;
+      if (edgePairingMode) {
+        edgePairingMode = false;
+        edgeFromId = null;
+        pendingEdge = null;
+        const panel = document.getElementById("add-edge-panel");
+        if (panel) panel.hidden = true;
+      } else {
+        edgePairingMode = true;
+        edgeFromId = null;
+        pendingEdge = null;
+        const panel = document.getElementById("add-edge-panel");
+        if (panel) panel.hidden = true;
+      }
+      syncEdgeModeButton();
+      updateEdgeHint();
+    });
+
+    document.getElementById("btn-add-edge-confirm")?.addEventListener("click", confirmAddEdgeFromPanel);
+    document.getElementById("btn-add-edge-cancel")?.addEventListener("click", cancelAddEdgePanel);
+
+    document.getElementById("btn-export-json")?.addEventListener("click", () => {
+      if (!editMode) return;
+      exportComponentsJson();
+    });
+
+    document.getElementById("btn-relayout")?.addEventListener("click", () => {
+      if (!editMode) return;
+      relayoutFromScratch();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (!editMode) return;
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (selectedEdgeIndex !== null) {
+          e.preventDefault();
+          deleteSelectedEdge();
+        }
+      }
+    });
   }
 
   async function load() {
@@ -1347,8 +1851,64 @@
 
     svg.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
+      if (editMode && e.target && /** @type {Element} */ (e.target).closest) {
+        const t = /** @type {Element} */ (e.target);
+        if (
+          t.closest(".topology-node-group") ||
+          t.closest(".base-edge-hit")
+        ) {
+          return;
+        }
+      }
       dragging = true;
       dragLast = svgPoint(e.clientX, e.clientY);
+    });
+
+    svg.addEventListener("click", (e) => {
+      if (!editMode) return;
+      const t = e.target instanceof Element ? e.target : null;
+      if (!t || !t.closest) return;
+      const onNode = t.closest(".topology-node-group");
+      const onEdgeHit = t.closest(".base-edge-hit");
+      if (placePalettePending && !onNode && !onEdgeHit) {
+        const pt = svgPoint(e.clientX, e.clientY);
+        const p = placePalettePending;
+        placePalettePending = null;
+        addNodeAt(p.ringId, p.type, p.label, pt.x, pt.y);
+        return;
+      }
+      if (placePalettePending) return;
+      if (!onNode && !onEdgeHit) {
+        selectedEdgeIndex = null;
+        clearNodeFocus();
+        renderBaseEdges();
+      }
+    });
+
+    svg.addEventListener(
+      "dragover",
+      (e) => {
+        if (!editMode) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      },
+      false
+    );
+
+    svg.addEventListener("drop", (e) => {
+      if (!editMode) return;
+      e.preventDefault();
+      const raw = e.dataTransfer.getData("application/json");
+      if (!raw) return;
+      try {
+        const tpl = JSON.parse(raw);
+        if (tpl.ringId && tpl.type) {
+          const pt = svgPoint(e.clientX, e.clientY);
+          addNodeAt(tpl.ringId, tpl.type, tpl.label || "New", pt.x, pt.y);
+        }
+      } catch (_) {
+        /* ignore */
+      }
     });
 
     window.addEventListener("mouseup", () => {
@@ -1390,6 +1950,7 @@
       await load();
       if (panelHead) panelHead.textContent = components.name || "Master topology";
       initPanZoom();
+      initEditor();
       redrawStatic();
       fitViewToExtents();
       renderRoutePanel();
