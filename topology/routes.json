@@ -16,14 +16,14 @@
       "description": "Composite scenario: AI-assisted prompt chain + deserialization/RCE (React2Shell-class). Ingress through DMZ/FW/LB to AI chat, malicious payload crosses AI→backend trust boundary, IPS to Application Server (React SSR / RCE), XDR containment, Splunk ES correlation (RBA). Parallel edges cover AI Defense alerts, Nexus/NetFlow to ES, outbound C2 blocked at firewall, and SOAR.",
       "nodes": [
         "internet-users",
-        "dmz",
-        "fw-perimeter",
         "adc",
-        "web",
         "ai",
         "backend",
         "ips",
         "app-server",
+        "fw-perimeter",
+        "threats",
+        "secure-endpoint",
         "cisco-xdr",
         "splunk-es"
       ],
@@ -31,8 +31,8 @@
         {
           "step": 1,
           "title": "Entry — Load Balancer",
-          "tool": "L7 Ingress / Load Balancer",
-          "nodes": ["internet-users", "dmz", "fw-perimeter", "adc", "web", "ai"],
+          "tool": "Cisco Application Delivery Controller (ADC)",
+          "nodes": ["internet-users", "adc", "ai"],
           "telemetryToSplunk": ["adc"]
         },
         {
@@ -60,7 +60,7 @@
           "step": 5,
           "title": "Smart switch — east-west visibility",
           "tool": "Cisco Nexus 9000 Series",
-          "nodes": ["backend", "app", "app-server", "nexus"],
+          "nodes": ["backend", "app", "nexus", "app-server"],
           "telemetryToSplunk": ["nexus"]
         },
         {
@@ -87,7 +87,7 @@
           "step": 9,
           "title": "Correlation layer — RBA",
           "tool": "Splunk Enterprise Security",
-          "nodes": ["splunk-es"],
+          "nodes": ["app-server", "splunk-es"],
           "note": "Correlates ADC, AI Defense, IPS, Nexus/NetFlow, firewall C2, and XDR alerts on the Application Server entity"
         }
       ]

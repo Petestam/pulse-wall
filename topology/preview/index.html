@@ -12,12 +12,10 @@
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body class="theme-colorpong drawer-open">
+  <body class="theme-colorpong drawer-collapsed">
     <div class="generative-stage" aria-hidden="true">
       <canvas id="viz"></canvas>
       <div class="generative-chrome">
-        <button type="button" id="btn-radial">Radial</button>
-        <button type="button" id="btn-comet">Comet</button>
         <button type="button" id="btn-spin" class="is-active">Spin</button>
         <button type="button" id="btn-labels">Labels</button>
         <button type="button" id="btn-sync">Sync pipe</button>
@@ -29,8 +27,8 @@
       </div>
     </div>
 
-    <button type="button" id="btn-toggle-drawer" class="drawer-toggle" aria-expanded="true">
-      Hide editor
+    <button type="button" id="btn-toggle-drawer" class="drawer-toggle" aria-expanded="false">
+      Show editor
     </button>
 
     <div class="shell shell--drawer" id="editor-shell">

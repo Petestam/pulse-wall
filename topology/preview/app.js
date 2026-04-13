@@ -1695,6 +1695,14 @@
       id: r.id,
       label: r.label || "",
       nodes: Array.isArray(r.nodes) ? [...r.nodes] : [],
+      attackSteps: Array.isArray(r.attackSteps)
+        ? r.attackSteps.map((step) => ({
+            step: Number(step.step) || 0,
+            title: step.title || "",
+            tool: step.tool || "",
+            nodes: Array.isArray(step.nodes) ? [...step.nodes] : [],
+          }))
+        : [],
       mode: r.mode || "",
     }));
     const zoneHalos = (components.zoneHalos || []).map((z) => ({
