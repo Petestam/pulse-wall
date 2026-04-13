@@ -223,23 +223,23 @@
       if (!raw) return;
       const x = JSON.parse(raw);
       if (!x || typeof x !== "object") return;
-      if (typeof x.arcJitter === "number") flowTune.arcJitter = clamp(x.arcJitter, 0, 2.5);
+      if (typeof x.arcJitter === "number") flowTune.arcJitter = clamp(x.arcJitter, 0, 20);
       if (typeof x.arcInconsistency === "number") {
-        flowTune.arcInconsistency = clamp(x.arcInconsistency, 0, 2.5);
+        flowTune.arcInconsistency = clamp(x.arcInconsistency, 0, 20);
       }
-      if (typeof x.strandSpread === "number") flowTune.strandSpread = clamp(x.strandSpread, 0.3, 3.5);
+      if (typeof x.strandSpread === "number") flowTune.strandSpread = clamp(x.strandSpread, 0, 20);
       if (typeof x.strandInstances === "number") {
-        flowTune.strandInstances = clamp(x.strandInstances, 0.5, 4);
+        flowTune.strandInstances = clamp(x.strandInstances, 0, 20);
       }
-      if (typeof x.yaw === "number") scene3d.yaw = clamp(x.yaw, -3.2, 3.2);
-      if (typeof x.pitch === "number") scene3d.pitch = clamp(x.pitch, -1.25, 1.25);
-      if (typeof x.depth === "number") scene3d.depth = clamp(x.depth, 0.4, 2.2);
+      if (typeof x.yaw === "number") scene3d.yaw = clamp(x.yaw, -20, 20);
+      if (typeof x.pitch === "number") scene3d.pitch = clamp(x.pitch, -20, 20);
+      if (typeof x.depth === "number") scene3d.depth = clamp(x.depth, 0, 20);
       if (typeof x.perspective === "number") {
-        scene3d.perspective = clamp(x.perspective, 0.2, 1.6);
+        scene3d.perspective = clamp(x.perspective, 0, 20);
       }
       if (typeof x.autoSpin === "boolean") scene3d.autoSpin = x.autoSpin;
       if (typeof x.spinSpeed === "number") {
-        scene3d.spinSpeed = clamp(x.spinSpeed, 0, 0.00055);
+        scene3d.spinSpeed = clamp(x.spinSpeed, 0, 20);
       }
     } catch (_) {
       /* ignore */
@@ -477,8 +477,10 @@
     ctx.restore();
   }
 
-  const CHASE_HOP_MS = 1650;
+  const CHASE_SPEED_PX_PER_MS = 0.12;
   const CHASE_PRELIGHT_MS = 760;
+  const CHASE_TAIL_DECAY_MS = 2200;
+  const CHASE_NODE_GLOW_WINDOW_MS = 1750;
   let activeChases = [];
   let scenarioSignature = "";
   let rafId = 0;
@@ -524,9 +526,54 @@
     updateScenarioButtonsActive();
   }
 
+  function estimateQuadraticLength(p0, c, p1, steps = 22) {
+    let prev = p0;
+    let len = 0;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const p = quadPoint(p0, c, p1, t);
+      len += Math.hypot(p.x - prev.x, p.y - prev.y);
+      prev = p;
+    }
+    return len;
+  }
+
+  function buildRouteTrack(route, nodeById, w, h, view) {
+    const segments = [];
+    const nodeArrivalMs = new Array(route.nodes.length).fill(0);
+    let cumulative = 0;
+    for (let i = 0; i < route.nodes.length - 1; i++) {
+      const a = nodeById.get(route.nodes[i]);
+      const b = nodeById.get(route.nodes[i + 1]);
+      if (!a || !b) {
+        nodeArrivalMs[i + 1] = cumulative;
+        continue;
+      }
+      const p0 = mapPipePoint(a, w, h, view);
+      const p1 = mapPipePoint(b, w, h, view);
+      const c = buildChaseCurve(p0, p1, `${route.id}:${i}`);
+      const lengthPx = Math.max(12, estimateQuadraticLength(p0, c, p1));
+      const durationMs = lengthPx / CHASE_SPEED_PX_PER_MS;
+      const seg = {
+        i,
+        p0,
+        p1,
+        c,
+        startMs: cumulative,
+        durationMs,
+        endMs: cumulative + durationMs,
+      };
+      cumulative = seg.endMs;
+      segments.push(seg);
+      nodeArrivalMs[i + 1] = cumulative;
+    }
+    return { segments, nodeArrivalMs, totalTravelMs: cumulative };
+  }
+
   function drawScenarioChase(w, h, pipe, nowMs) {
     const nodeById = new Map(pipe.nodes.map((n) => [n.id, n]));
     const routes = Array.isArray(pipe.routes) ? pipe.routes : [];
+    const palette = Array.isArray(pipe.routeColors) ? pipe.routeColors : [];
     if (!routes.length || !activeChases.length) return false;
     const labelPulseByNodeId = new Map();
 
@@ -535,37 +582,35 @@
     ctx.globalCompositeOperation = "lighter";
 
     for (const chase of activeChases) {
-      const route = routes.find((r) => r.id === chase.routeId);
+      const routeIndex = routes.findIndex((r) => r.id === chase.routeId);
+      const route = routeIndex >= 0 ? routes[routeIndex] : null;
       if (!route || !Array.isArray(route.nodes) || route.nodes.length < 2) continue;
+      const activeCol = scenarioColorForIndex(routeIndex, palette);
+      const track = buildRouteTrack(route, nodeById, w, h, pipe.view);
+      const segmentCount = track.segments.length;
+      if (!segmentCount) continue;
       const elapsed = nowMs - chase.startedAt;
       const prelightProgress = clamp01(elapsed / CHASE_PRELIGHT_MS);
       const travelElapsed = Math.max(0, elapsed - CHASE_PRELIGHT_MS);
-      const segmentCount = route.nodes.length - 1;
-      const totalMs = CHASE_PRELIGHT_MS + segmentCount * CHASE_HOP_MS + CHASE_HOP_MS * 1.15;
+      const totalMs = CHASE_PRELIGHT_MS + track.totalTravelMs + CHASE_TAIL_DECAY_MS * 0.5;
       if (elapsed > totalMs) continue;
       survivors.push(chase);
       const routeTailDecay = Math.exp(
-        -Math.max(0, travelElapsed - segmentCount * CHASE_HOP_MS) / (CHASE_HOP_MS * 2.2)
+        -Math.max(0, travelElapsed - track.totalTravelMs) / CHASE_TAIL_DECAY_MS
       );
 
-      for (let i = 0; i < segmentCount; i++) {
-        const a = nodeById.get(route.nodes[i]);
-        const b = nodeById.get(route.nodes[i + 1]);
-        if (!a || !b) continue;
-        const p0 = mapPipePoint(a, w, h, pipe.view);
-        const p1 = mapPipePoint(b, w, h, pipe.view);
-        const c = buildChaseCurve(p0, p1, `${route.id}:${i}`);
-        const t = (travelElapsed - i * CHASE_HOP_MS) / CHASE_HOP_MS;
-        const fullPhase = nowMs * 0.00012 + i * 0.21;
+      for (const seg of track.segments) {
+        const { i, p0, p1, c } = seg;
+        const t = (travelElapsed - seg.startMs) / seg.durationMs;
         const fullGrad = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
-        fullGrad.addColorStop(0, rgba(MID_BLUE, 0.26));
-        fullGrad.addColorStop(0.5, rgba(CYAN, 0.38));
-        fullGrad.addColorStop(1, rgba(MID_BLUE, 0.3));
+        fullGrad.addColorStop(0, rgba(lerpColor(activeCol, DEEP_BLUE, 0.22), 0.24));
+        fullGrad.addColorStop(0.5, rgba(activeCol, 0.38));
+        fullGrad.addColorStop(1, rgba(lerpColor(activeCol, DEEP_BLUE, 0.22), 0.28));
 
         const fullGradCore = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
-        fullGradCore.addColorStop(0, rgba(lerpColor(MID_BLUE, WHITE, 0.08), 0.64));
-        fullGradCore.addColorStop(0.5, rgba(lerpColor(CYAN, WHITE, 0.14), 0.86));
-        fullGradCore.addColorStop(1, rgba(lerpColor(MID_BLUE, WHITE, 0.08), 0.68));
+        fullGradCore.addColorStop(0, rgba(lerpColor(activeCol, WHITE, 0.18), 0.62));
+        fullGradCore.addColorStop(0.5, rgba(lerpColor(activeCol, WHITE, 0.28), 0.88));
+        fullGradCore.addColorStop(1, rgba(lerpColor(activeCol, WHITE, 0.18), 0.68));
         strokeQuadraticWindow(
           p0,
           c,
@@ -731,8 +776,9 @@
         const n = nodeById.get(route.nodes[i]);
         if (!n) continue;
         const p = mapPipePoint(n, w, h, pipe.view);
-        const dt = Math.abs(travelElapsed - i * CHASE_HOP_MS);
-        const k = clamp01(1 - dt / (CHASE_HOP_MS * 1.06));
+        const arrivalMs = track.nodeArrivalMs[i] || 0;
+        const dt = Math.abs(travelElapsed - arrivalMs);
+        const k = clamp01(1 - dt / CHASE_NODE_GLOW_WINDOW_MS);
         if (k <= 0) continue;
         const col = ciscoColorAtT(i / Math.max(1, route.nodes.length - 1));
         ctx.globalAlpha = 1;
@@ -741,7 +787,7 @@
         ctx.arc(p.x, p.y, 4.1 + 4.7 * k, 0, Math.PI * 2);
         ctx.fill();
 
-        const msSinceArrival = elapsed - i * CHASE_HOP_MS;
+        const msSinceArrival = travelElapsed - arrivalMs;
         const lp = pulseEnvelope(msSinceArrival);
         if (lp > 0) {
           const prev = labelPulseByNodeId.get(n.id) || 0;
@@ -1148,7 +1194,7 @@
       dragLastX = e.clientX;
       dragLastY = e.clientY;
       scene3d.yaw += dx * 0.006;
-      scene3d.pitch = clamp(scene3d.pitch + dy * 0.0045, -1.1, 1.1);
+      scene3d.pitch = clamp(scene3d.pitch + dy * 0.0045, -20, 20);
       saveFlowTune();
       const running = render();
       if (running || scene3d.autoSpin) scheduleAnimationFrame();
@@ -1160,7 +1206,7 @@
       "wheel",
       (e) => {
         e.preventDefault();
-        scene3d.depth = clamp(scene3d.depth + (e.deltaY > 0 ? -0.05 : 0.05), 0.4, 2.2);
+        scene3d.depth = clamp(scene3d.depth + (e.deltaY > 0 ? -0.05 : 0.05), 0, 20);
         saveFlowTune();
         const running = render();
         if (running || scene3d.autoSpin) scheduleAnimationFrame();
@@ -1303,31 +1349,31 @@
       <h3 class="flow-tune-title">Debug / Flow Tune</h3>
       <div class="flow-tune-row">
         <label>Arc jitter <span id="flow-val-jitter"></span></label>
-        <input id="flow-jitter" type="range" min="0" max="2.5" step="0.01" />
+        <input id="flow-jitter" type="range" min="0" max="20" step="0.01" />
       </div>
       <div class="flow-tune-row">
         <label>Arc inconsistency <span id="flow-val-inconsistency"></span></label>
-        <input id="flow-inconsistency" type="range" min="0" max="2.5" step="0.01" />
+        <input id="flow-inconsistency" type="range" min="0" max="20" step="0.01" />
       </div>
       <div class="flow-tune-row">
         <label>Strand spread <span id="flow-val-spread"></span></label>
-        <input id="flow-spread" type="range" min="0.3" max="3.5" step="0.01" />
+        <input id="flow-spread" type="range" min="0" max="20" step="0.01" />
       </div>
       <div class="flow-tune-row">
         <label>Strand instances <span id="flow-val-instances"></span></label>
-        <input id="flow-instances" type="range" min="0.5" max="4" step="0.01" />
+        <input id="flow-instances" type="range" min="0" max="20" step="0.01" />
       </div>
       <div class="flow-tune-row">
         <label>3D depth <span id="flow-val-depth"></span></label>
-        <input id="flow-depth" type="range" min="0.4" max="2.2" step="0.01" />
+        <input id="flow-depth" type="range" min="0" max="20" step="0.01" />
       </div>
       <div class="flow-tune-row">
         <label>Perspective <span id="flow-val-perspective"></span></label>
-        <input id="flow-perspective" type="range" min="0.2" max="1.6" step="0.01" />
+        <input id="flow-perspective" type="range" min="0" max="20" step="0.01" />
       </div>
       <div class="flow-tune-row">
         <label>Spin speed <span id="flow-val-spinspeed"></span></label>
-        <input id="flow-spinspeed" type="range" min="0" max="0.00055" step="0.00001" />
+        <input id="flow-spinspeed" type="range" min="0" max="20" step="0.01" />
       </div>
       <div class="flow-tune-actions">
         <button type="button" id="flow-reset">Reset</button>
@@ -1371,13 +1417,13 @@
     };
 
     const onTune = () => {
-      flowTune.arcJitter = clamp(Number(refs.jitter.value) || 0, 0, 2.5);
-      flowTune.arcInconsistency = clamp(Number(refs.inconsistency.value) || 0, 0, 2.5);
-      flowTune.strandSpread = clamp(Number(refs.spread.value) || 1, 0.3, 3.5);
-      flowTune.strandInstances = clamp(Number(refs.instances.value) || 1, 0.5, 4);
-      scene3d.depth = clamp(Number(refs.depth.value) || 1, 0.4, 2.2);
-      scene3d.perspective = clamp(Number(refs.perspective.value) || 1, 0.2, 1.6);
-      scene3d.spinSpeed = clamp(Number(refs.spinSpeed.value) || 0, 0, 0.00055);
+      flowTune.arcJitter = clamp(Number(refs.jitter.value) || 0, 0, 20);
+      flowTune.arcInconsistency = clamp(Number(refs.inconsistency.value) || 0, 0, 20);
+      flowTune.strandSpread = clamp(Number(refs.spread.value) || 1, 0, 20);
+      flowTune.strandInstances = clamp(Number(refs.instances.value) || 1, 0, 20);
+      scene3d.depth = clamp(Number(refs.depth.value) || 1, 0, 20);
+      scene3d.perspective = clamp(Number(refs.perspective.value) || 1, 0, 20);
+      scene3d.spinSpeed = clamp(Number(refs.spinSpeed.value) || 0, 0, 20);
       syncUi();
       saveFlowTune();
       const running = render();
