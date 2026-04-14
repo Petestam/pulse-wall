@@ -1,0 +1,3021 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ellipsoid 2:1:1 · blue gradient</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+      }
+      body {
+        background: #050a1f;
+      }
+      #bg {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      /* Largest 12×5 (topology tile) rectangle inside the window */
+      .viewport-stage {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      .viewport-12x5 {
+        pointer-events: auto;
+        position: relative;
+        width: min(100vw, calc(100vh * 12 / 5));
+        height: min(100vh, calc(100vw * 5 / 12));
+        flex-shrink: 0;
+        border-radius: 2px;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+        overflow: hidden;
+      }
+      #viz {
+        position: absolute;
+        inset: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        touch-action: none;
+        cursor: grab;
+      }
+      #viz.is-dragging {
+        cursor: grabbing;
+      }
+      .chrome {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+      }
+      .chrome a {
+        color: rgba(255, 255, 255, 0.45);
+        text-decoration: none;
+      }
+      .chrome a:hover {
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .chrome button {
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        background: rgba(5, 10, 31, 0.55);
+        color: rgba(230, 248, 255, 0.9);
+        padding: 8px 14px;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: 2px;
+      }
+      .chrome button:hover {
+        border-color: rgba(0, 210, 255, 0.45);
+        color: #fff;
+      }
+      .chrome button.is-active {
+        border-color: rgba(0, 210, 255, 0.65);
+        box-shadow: 0 0 14px rgba(0, 185, 255, 0.25);
+        color: #f4fbff;
+      }
+      .chrome .sep {
+        color: rgba(255, 255, 255, 0.25);
+        user-select: none;
+      }
+      .chrome-bg-ctrl {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px 14px;
+        margin-left: 4px;
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.42);
+      }
+      .chrome-bg-ctrl label {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .chrome-bg-ctrl input[type="range"] {
+        width: 84px;
+        vertical-align: middle;
+      }
+      .chrome-bg-ctrl__val {
+        min-width: 1.75em;
+        font-variant-numeric: tabular-nums;
+        color: rgba(255, 255, 255, 0.55);
+      }
+      .chrome-tools {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 6px;
+      }
+      .chrome-tool {
+        position: relative;
+        display: inline-flex;
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .chrome-tool__pop {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        z-index: 4;
+        margin-bottom: 6px;
+        min-width: 212px;
+        padding: 10px 12px;
+        background: rgba(5, 10, 31, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 4px;
+        box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.4);
+        color: rgba(230, 248, 255, 0.9);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0;
+        visibility: hidden;
+        max-height: 0;
+        overflow: hidden;
+        pointer-events: none;
+        transition:
+          opacity 0.18s ease,
+          max-height 0.22s ease,
+          visibility 0.18s;
+      }
+      .chrome-tool.chrome-tool--open .chrome-tool__pop {
+        opacity: 1;
+        visibility: visible;
+        /* Cap below the top of the window; scroll when content is taller */
+        max-height: min(85vh, 720px);
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 210, 255, 0.35) transparent;
+        pointer-events: auto;
+      }
+      .chrome-tool.chrome-tool--open .chrome-tool__pop::-webkit-scrollbar {
+        width: 6px;
+      }
+      .chrome-tool.chrome-tool--open .chrome-tool__pop::-webkit-scrollbar-thumb {
+        background: rgba(0, 210, 255, 0.35);
+        border-radius: 3px;
+      }
+      .chrome-tool__pop button.chrome-tool__reseed {
+        width: 100%;
+        margin-top: 8px;
+        padding: 7px 10px;
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        background: rgba(5, 10, 31, 0.55);
+        color: rgba(230, 248, 255, 0.9);
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .chrome-tool__pop button.chrome-tool__reseed:hover {
+        border-color: rgba(0, 210, 255, 0.45);
+        color: #fff;
+      }
+      .chrome-tool__pop label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .chrome-tool__pop label + label {
+        margin-top: 10px;
+      }
+      .chrome-tool__pop .slide-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .chrome-tool__pop .slide-val {
+        flex-shrink: 0;
+        min-width: 3em;
+        text-align: right;
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+      .chrome-tool__pop .chrome-tool__subhead {
+        margin: 0 0 6px;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: rgba(0, 210, 255, 0.55);
+      }
+      .chrome-tool__pop .chrome-tool__subhead:not(:first-child) {
+        margin-top: 12px;
+      }
+      .chrome-tool__pop .chrome-tool__toggles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .chrome-tool__pop .chrome-tool__toggles label {
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        text-transform: none;
+        letter-spacing: 0.03em;
+        font-size: 10px;
+        cursor: pointer;
+      }
+      .chrome-tool__pop .chrome-tool__toggles input {
+        accent-color: rgba(0, 210, 255, 0.75);
+      }
+      .chrome-tool__pop input[type="range"] {
+        width: 100%;
+        min-width: 0;
+        accent-color: rgba(0, 210, 255, 0.75);
+      }
+      .chrome-tool__row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .chrome-tool__val {
+        flex-shrink: 0;
+        min-width: 2.5em;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="bg" width="300" height="150" aria-hidden="true"></canvas>
+    <div class="viewport-stage" aria-hidden="true">
+      <div class="viewport-12x5" id="viewport-12x5">
+        <canvas
+          id="viz"
+          aria-label="Ellipsoid in 12×5×5 volume — drag to rotate, scroll to zoom, Reset view for 12×5 front"
+        ></canvas>
+      </div>
+    </div>
+    <div class="chrome">
+      <button type="button" id="btn-reset" title="12×5 front (XY) · zoom 100%">
+        Reset view
+      </button>
+      <div class="chrome-tool" id="tool-volume">
+        <div class="chrome-tool__pop" id="pop-volume" role="region" aria-label="Solid mode">
+          <p class="chrome-tool__subhead">Solid mode</p>
+          <div class="chrome-tool__toggles">
+            <label>
+              <input type="radio" name="solid-mode" id="solid-mode-ellipsoid" checked />
+              <span>Ellipsoid</span>
+            </label>
+            <label>
+              <input type="radio" name="solid-mode" id="solid-mode-volume" />
+              <span>12×5×5 volume</span>
+            </label>
+          </div>
+          <div class="chrome-tool__toggles">
+            <label>
+              <input type="checkbox" id="chk-solid-geometry" />
+              <span>Show solid geometry</span>
+            </label>
+          </div>
+        </div>
+        <button type="button" id="btn-volume" aria-pressed="false" aria-expanded="false" title="Solid mode and geometry">
+          Solid: Ellipsoid
+        </button>
+      </div>
+      <div class="chrome-tools" role="group" aria-label="Slide axes">
+        <div class="chrome-tool" id="tool-axis-slide">
+          <div class="chrome-tool__pop" id="pop-axis-slide" role="region" aria-label="Slide axes and mesh slide">
+            <p class="chrome-tool__subhead">Surface slide</p>
+            <div class="chrome-tool__toggles">
+              <label>
+                <input type="checkbox" id="chk-axis-slide-anim" />
+                <span>Animate slide</span>
+              </label>
+            </div>
+            <label>
+              <span>Animation speed</span>
+              <div class="slide-row">
+                <input type="range" id="slide-anim-speed" min="10" max="250" value="100" step="5" />
+                <span class="slide-val" id="slide-anim-speed-val">100%</span>
+              </div>
+            </label>
+            <p class="chrome-tool__subhead">Mesh slide</p>
+            <label>
+              <span>Angle (0° = azimuth · 90° = colatitude)</span>
+              <div class="slide-row">
+                <input type="range" id="slide-angle" min="0" max="90" value="50" step="1" />
+                <span class="slide-val" id="slide-angle-val">50°</span>
+              </div>
+            </label>
+            <label>
+              <span>V offset (azimuth phase)</span>
+              <div class="slide-row">
+                <input type="range" id="slide-off-v" min="0" max="360" value="0" step="2" />
+                <span class="slide-val" id="slide-off-v-val">0°</span>
+              </div>
+            </label>
+            <label>
+              <span>U offset (colatitude wave phase)</span>
+              <div class="slide-row">
+                <input type="range" id="slide-off-u" min="0" max="360" value="0" step="2" />
+                <span class="slide-val" id="slide-off-u-val">0°</span>
+              </div>
+            </label>
+          </div>
+          <button type="button" id="btn-axis-slide" aria-pressed="false" aria-expanded="false" title="Mesh slide on the ellipsoid — open for controls">
+            Slide axes
+          </button>
+        </div>
+      </div>
+      <div class="chrome-tools" role="group" aria-label="Panels, mesh, markers">
+        <div class="chrome-tool" id="tool-panels">
+          <div class="chrome-tool__pop" id="pop-panels" role="region" aria-label="Panel seams">
+            <div class="chrome-tool__toggles">
+              <label>
+                <input type="checkbox" id="chk-panel-seams" />
+                <span>Seam lines</span>
+              </label>
+              <label>
+                <input type="checkbox" id="chk-panel-dots" checked />
+                <span>Seam dots</span>
+              </label>
+              <label>
+                <input type="checkbox" id="chk-panel-uniform" checked />
+                <span>Uniform wrap</span>
+              </label>
+            </div>
+            <label>
+              <span>Wrap jitter</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="panel-wrap-jitter" min="0" max="100" value="35" step="1" />
+                <span class="chrome-tool__val" id="panel-wrap-jitter-val">35%</span>
+              </div>
+            </label>
+            <label>
+              <span>Panel tightness (seam count)</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="panel-tightness" min="3" max="12" value="6" step="1" />
+                <span class="chrome-tool__val" id="panel-tightness-val">6</span>
+              </div>
+            </label>
+            <label>
+              <span>Seam dot density (0–100)</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="panel-dot-density" min="0" max="100" value="3" step="1" />
+                <span class="chrome-tool__val" id="panel-dot-val">3</span>
+              </div>
+            </label>
+            <label>
+              <span>Seam layout seed</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="panel-seam-seed" min="0" max="2000" value="0" step="1" />
+                <span class="chrome-tool__val" id="panel-seam-seed-val">0</span>
+              </div>
+            </label>
+            <label>
+              <span>Panel link skip (adjacent dots on same seam)</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="panel-link-skip" min="0" max="12" value="2" step="1" />
+                <span class="chrome-tool__val" id="panel-link-skip-val">2</span>
+              </div>
+            </label>
+            <button type="button" class="chrome-tool__reseed" id="btn-panel-seam-reseed" title="Random seam layout">
+              Reseed seams
+            </button>
+            <label>
+              <span>Panel seam lines</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="panel-line-dash" min="0" max="100" value="42" step="1" />
+                <span class="chrome-tool__val" id="panel-line-val">42</span>
+              </div>
+            </label>
+          </div>
+          <button type="button" id="btn-panels" aria-pressed="false" aria-expanded="false" title="Volleyball / soccer-style panel seams — click for options">
+            Panels
+          </button>
+        </div>
+        <div class="chrome-tool" id="tool-mesh">
+          <div class="chrome-tool__pop" id="pop-mesh" role="region" aria-label="Mesh">
+            <div class="chrome-tool__toggles">
+              <label>
+                <input type="checkbox" id="chk-mesh-show" />
+                <span>Show wireframe</span>
+              </label>
+            </div>
+            <label>
+              <span>Wire opacity</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="mesh-opacity" min="15" max="100" value="100" step="1" />
+                <span class="chrome-tool__val" id="mesh-opacity-val">100%</span>
+              </div>
+            </label>
+            <p class="chrome-tool__subhead">Irregular mesh</p>
+            <label>
+              <span>Seed (shift noise field)</span>
+              <div class="slide-row">
+                <input type="range" id="irregular-seed" min="0" max="2000" value="0" step="1" />
+                <span class="slide-val" id="irregular-seed-val">0</span>
+              </div>
+            </label>
+            <label>
+              <span>Scale (jitter strength)</span>
+              <div class="slide-row">
+                <input type="range" id="irregular-scale" min="0" max="250" value="100" step="1" />
+                <span class="slide-val" id="irregular-scale-val">100%</span>
+              </div>
+            </label>
+          </div>
+          <button type="button" id="btn-mesh" aria-pressed="false" aria-expanded="false" title="Ellipsoid wireframe — click for opacity and irregular mesh">
+            Mesh
+          </button>
+        </div>
+        <div class="chrome-tool" id="tool-markers">
+          <div class="chrome-tool__pop" id="pop-markers" role="region" aria-label="Vertex markers">
+            <div class="chrome-tool__toggles">
+              <label>
+                <input type="checkbox" id="chk-markers-show" checked />
+                <span>Show vertex markers</span>
+              </label>
+            </div>
+            <label>
+              <span>Count</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="marker-count" min="0" max="2016" value="50" step="1" />
+                <span class="chrome-tool__val" id="marker-count-val">50</span>
+              </div>
+            </label>
+            <label>
+              <span>Dot size</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="marker-size" min="50" max="500" value="300" step="5" />
+                <span class="chrome-tool__val" id="marker-size-val">3.00x</span>
+              </div>
+            </label>
+          </div>
+          <button type="button" id="btn-markers" class="is-active" aria-pressed="true" aria-expanded="false" title="White dots on mesh vertices — click for count">
+            Markers
+          </button>
+        </div>
+        <div class="chrome-tool" id="tool-paths">
+          <div class="chrome-tool__pop" id="pop-paths" role="region" aria-label="Pathfinder">
+            <div class="chrome-tool__toggles">
+              <label>
+                <input type="checkbox" id="chk-paths-show" checked />
+                <span>Show paths</span>
+              </label>
+              <label>
+                <input type="checkbox" id="chk-path-through" checked />
+                <span>Through points</span>
+              </label>
+              <label>
+                <input type="checkbox" id="chk-static-volume-points" checked />
+                <span>Static volume points (10 · 6/8 inset from outer shell)</span>
+              </label>
+            </div>
+            <label>
+              <span>Fillet amount</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="path-fillet" min="0" max="500" value="100" step="5" />
+                <span class="chrome-tool__val" id="path-fillet-val">1.00x</span>
+              </div>
+            </label>
+            <label>
+              <span>Offset orb size</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="path-handle" min="0" max="260" value="100" step="1" />
+                <span class="chrome-tool__val" id="path-handle-val">1.00x</span>
+              </div>
+            </label>
+            <label>
+              <span>Offset orb rotation</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="path-extend" min="0" max="360" value="0" step="1" />
+                <span class="chrome-tool__val" id="path-extend-val">0°</span>
+              </div>
+            </label>
+          </div>
+          <button type="button" id="btn-paths" class="is-active" aria-pressed="true" aria-expanded="false" title="Static pathfinder connections — click for controls">
+            Pathfinder
+          </button>
+        </div>
+      </div>
+      <div class="chrome-bg-ctrl" role="group" aria-label="Background gradient">
+        <label>
+          <span>Waves</span>
+          <input type="range" id="bg-wave-freq" min="0" max="100" value="58" step="1" title="Particle wave frequency" />
+          <span class="chrome-bg-ctrl__val" id="bg-wave-freq-val">58</span>
+        </label>
+        <label>
+          <span>Contrast</span>
+          <input type="range" id="bg-wave-contrast" min="0" max="100" value="52" step="1" title="Particle wave contrast" />
+          <span class="chrome-bg-ctrl__val" id="bg-wave-contrast-val">52</span>
+        </label>
+      </div>
+      <span class="sep">·</span>
+      <a href="blank-gradient-fabric.html">Fabric explore</a>
+      <span class="sep">·</span>
+      <a href="generative.html">Strand field</a>
+      <span class="sep">·</span>
+      <a href="index.html">Topology editor</a>
+    </div>
+    <script>
+      (function () {
+        "use strict";
+        const canvas = document.getElementById("bg");
+        const ctx = canvas.getContext("2d", { alpha: false });
+        let cssW = 300;
+        let cssH = 150;
+
+        const BLOB_COUNT = 9;
+        const T0 = performance.now();
+        const MAX_GRID_CELLS = 12500;
+
+        const bgWaveFreqInput = document.getElementById("bg-wave-freq");
+        const bgWaveContrastInput = document.getElementById("bg-wave-contrast");
+        const bgWaveFreqVal = document.getElementById("bg-wave-freq-val");
+        const bgWaveContrastVal = document.getElementById("bg-wave-contrast-val");
+        function syncBgValLabels() {
+          if (bgWaveFreqVal && bgWaveFreqInput) {
+            bgWaveFreqVal.textContent = String(bgWaveFreqInput.value);
+          }
+          if (bgWaveContrastVal && bgWaveContrastInput) {
+            bgWaveContrastVal.textContent = String(bgWaveContrastInput.value);
+          }
+        }
+        if (bgWaveFreqInput) bgWaveFreqInput.addEventListener("input", syncBgValLabels);
+        if (bgWaveContrastInput) bgWaveContrastInput.addEventListener("input", syncBgValLabels);
+        syncBgValLabels();
+
+        function resize() {
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          cssW = window.innerWidth;
+          cssH = window.innerHeight;
+          canvas.width = Math.max(1, Math.floor(cssW * dpr));
+          canvas.height = Math.max(1, Math.floor(cssH * dpr));
+          canvas.style.width = cssW + "px";
+          canvas.style.height = cssH + "px";
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        function drawBlob(cx, cy, r, stops) {
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+          for (let i = 0; i < stops.length; i++) {
+            g.addColorStop(stops[i][0], stops[i][1]);
+          }
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        function tick(now) {
+          const fq = bgWaveFreqInput ? Number(bgWaveFreqInput.value) : 50;
+          const ct = bgWaveContrastInput ? Number(bgWaveContrastInput.value) : 50;
+          const freqScale = 0.35 + (Math.max(0, Math.min(100, fq)) / 100) * 2.15;
+          const contrastMul = 0.35 + (Math.max(0, Math.min(100, ct)) / 100) * 1.65;
+          const waveAmp = 0.52 + (ct / 100) * 0.78;
+          const t = (now - T0) * 0.001 * freqScale;
+          const w = cssW;
+          const h = cssH;
+          const m = Math.min(w, h);
+          let gridStep = Math.max(7, Math.min(11, Math.floor(m / 85)));
+          let cols = Math.ceil(w / gridStep) + 3;
+          let rows = Math.ceil(h / gridStep) + 3;
+          while (cols * rows > MAX_GRID_CELLS && gridStep < 22) {
+            gridStep++;
+            cols = Math.ceil(w / gridStep) + 3;
+            rows = Math.ceil(h / gridStep) + 3;
+          }
+
+          ctx.fillStyle = "#050a1f";
+          ctx.fillRect(0, 0, w, h);
+
+          const shift = Math.sin(t * 0.09) * w * 0.05 + Math.cos(t * 0.055) * w * 0.035;
+          const tilt = Math.sin(t * 0.035) * 0.1;
+          const x1 = shift;
+          const y1 = tilt * h;
+          const x2 = w + shift * 0.28;
+          const y2 = h - tilt * h;
+          const baseGrad = ctx.createLinearGradient(x1, y1, x2, y2);
+          baseGrad.addColorStop(0, "rgba(72, 188, 245, 0.92)");
+          baseGrad.addColorStop(0.28 + Math.sin(t * 0.07) * 0.03, "rgba(38, 78, 210, 0.88)");
+          baseGrad.addColorStop(0.58 + Math.cos(t * 0.05) * 0.025, "rgba(22, 48, 150, 0.9)");
+          baseGrad.addColorStop(0.82, "rgba(8, 14, 45, 0.95)");
+          baseGrad.addColorStop(1, "#050a1f");
+          ctx.globalAlpha = 0.72;
+          ctx.fillStyle = baseGrad;
+          ctx.fillRect(0, 0, w, h);
+          ctx.globalAlpha = 1;
+
+          ctx.globalCompositeOperation = "screen";
+          for (let i = 0; i < BLOB_COUNT; i++) {
+            const k = i + 0.37;
+            const bx =
+              w *
+              (0.5 +
+                0.44 * Math.sin(t * 0.058 + k * 1.17) * Math.cos(t * 0.038 + k * 0.51) +
+                0.06 * Math.sin(t * 0.16 + k));
+            const by =
+              h *
+              (0.48 +
+                0.4 * Math.cos(t * 0.048 + k * 1.31) +
+                0.08 * Math.sin(t * 0.12 + k * 0.9) +
+                0.045 * Math.cos(t * 0.24 + i * 0.4));
+            const br = m * (0.42 + 0.18 * Math.sin(t * 0.065 + i) + 0.07 * Math.cos(t * 0.09 + i * 1.8));
+            const hueShift = 0.1 * Math.sin(t * 0.07 + i);
+            drawBlob(bx, by, br, [
+              [0, "rgba(120, 210, 255, " + (0.1 + hueShift * 0.04) + ")"],
+              [0.22, "rgba(70, 130, 235, " + (0.08 - hueShift * 0.02) + ")"],
+              [0.55, "rgba(35, 70, 175, 0.045)"],
+              [0.82, "rgba(12, 22, 70, 0.02)"],
+              [1, "rgba(5, 10, 31, 0)"],
+            ]);
+          }
+
+          ctx.globalCompositeOperation = "lighter";
+          for (let i = 0; i < 5; i++) {
+            const bx =
+              w * (0.12 + 0.76 * (0.5 + 0.5 * Math.sin(t * 0.042 + i * 1.9))) +
+              w * 0.055 * Math.cos(t * 0.1 + i);
+            const by =
+              h * (0.1 + 0.8 * (0.5 + 0.5 * Math.cos(t * 0.05 + i * 2.1))) +
+              h * 0.045 * Math.sin(t * 0.11 + i * 0.7);
+            const br = m * (0.52 + 0.12 * Math.sin(t * 0.055 + i));
+            drawBlob(bx, by, br, [
+              [0, "rgba(85, 155, 240, 0.065)"],
+              [0.45, "rgba(45, 75, 165, 0.035)"],
+              [0.78, "rgba(15, 25, 80, 0.012)"],
+              [1, "rgba(5, 10, 31, 0)"],
+            ]);
+          }
+          ctx.globalCompositeOperation = "source-over";
+
+          const waveX = (px, py, tt) => {
+            let x = 0;
+            const ax = px * 0.026;
+            const ay = py * 0.024;
+            x += Math.sin(tt * 0.38 + ax * 1.1 + ay * 0.75) * 7;
+            x += Math.cos(tt * 0.26 - ax * 1.35 + ay * 0.95) * 5.5;
+            x += Math.sin(tt * 0.51 + (px + py) * 0.019) * 4.5;
+            x += Math.sin(ax + tt * 0.31) * Math.sin(ay + tt * 0.27) * 14;
+            x += Math.sin(px * 0.038 + tt * 0.35) * Math.sin(py * 0.036 - tt * 0.29) * 11;
+            x += Math.sin((px * px + py * py) * 1.15e-5 + tt * 0.18) * 8;
+            x += Math.cos(px * 0.021 + py * 0.019 + tt * 0.44) * 6;
+            return x;
+          };
+          const waveY = (px, py, tt) => {
+            let y = 0;
+            const ax = px * 0.025;
+            const ay = py * 0.027;
+            y += Math.cos(tt * 0.36 + ay * 1.15 + ax * 0.7) * 6.5;
+            y += Math.sin(tt * 0.29 + ay * 1.28 - ax * 0.88) * 5;
+            y += Math.cos(tt * 0.48 + (px - py) * 0.017) * 4.5;
+            y += Math.cos(ax + tt * 0.28) * Math.sin(ay + tt * 0.32) * 13;
+            y += Math.cos(px * 0.037 - tt * 0.31) * Math.sin(py * 0.035 + tt * 0.26) * 10;
+            y += Math.sin(px * py * 2.1e-5 + tt * 0.22) * 7;
+            y += Math.sin(ax * 1.1 - ay * 0.9 + tt * 0.41) * 5.5;
+            return y;
+          };
+
+          const offX = Math.sin(t * 0.14) * gridStep * 0.65 + Math.cos(t * 0.09) * gridStep * 0.25;
+          const offY = Math.cos(t * 0.11) * gridStep * 0.6 + Math.sin(t * 0.085) * gridStep * 0.28;
+
+          for (let j = -2; j < rows; j++) {
+            for (let i = -2; i < cols; i++) {
+              const px = i * gridStep + offX;
+              const py = j * gridStep + offY;
+              const ox = waveX(px, py, t) * waveAmp;
+              const oy = waveY(px, py, t) * waveAmp;
+              const nx = px / w;
+              const fold =
+                0.5 +
+                0.5 * Math.sin(t * 0.72 + px * 0.014 + py * 0.011) * Math.cos(t * 0.58 + px * 0.011 - py * 0.013);
+              const flow = 0.5 + 0.5 * Math.sin(t * 0.68 + nx * 6 + py * 0.012);
+              const pr =
+                (0.45 + 0.45 * Math.sin(t * 0.95 + i * 0.55 + j * 0.48)) *
+                (0.88 + 0.22 * (ct / 100));
+              const aPeak = 0.055 + 0.15 * (ct / 100);
+              const baseA =
+                (0.018 + 0.06 * nx * flow * fold + 0.025 * (1 - nx)) * contrastMul;
+              const a = Math.min(
+                aPeak,
+                Math.max(
+                  0.012 * contrastMul,
+                  baseA +
+                    0.045 * Math.sin(t * 1.15 + i * 0.9 + j * 0.65) * contrastMul,
+                ),
+              );
+              const r = Math.round(130 + nx * 100 + fold * 20);
+              const g = Math.round(195 + nx * 50 + flow * 28);
+              const b = 255;
+              ctx.fillStyle = "rgba(" + r + "," + g + "," + b + "," + a + ")";
+              ctx.beginPath();
+              ctx.arc(px + ox, py + oy, pr, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+
+          requestAnimationFrame(tick);
+        }
+
+        resize();
+        window.addEventListener("resize", resize);
+        requestAnimationFrame(tick);
+      })();
+    </script>
+    <script>
+      (function () {
+        "use strict";
+        const canvas = document.getElementById("viz");
+        const viewport = document.getElementById("viewport-12x5");
+        const btnReset = document.getElementById("btn-reset");
+        const btnVolume = document.getElementById("btn-volume");
+        const toolVolume = document.getElementById("tool-volume");
+        const solidModeEllipsoid = document.getElementById("solid-mode-ellipsoid");
+        const solidModeVolume = document.getElementById("solid-mode-volume");
+        const chkSolidGeometry = document.getElementById("chk-solid-geometry");
+        const btnAxisSlide = document.getElementById("btn-axis-slide");
+        const toolAxisSlide = document.getElementById("tool-axis-slide");
+        const chkAxisSlideAnim = document.getElementById("chk-axis-slide-anim");
+        const toolPanels = document.getElementById("tool-panels");
+        const toolMesh = document.getElementById("tool-mesh");
+        const toolMarkers = document.getElementById("tool-markers");
+        const toolPaths = document.getElementById("tool-paths");
+        const chkPanelSeams = document.getElementById("chk-panel-seams");
+        const chkPanelDots = document.getElementById("chk-panel-dots");
+        const chkPanelUniform = document.getElementById("chk-panel-uniform");
+        const chkMeshShow = document.getElementById("chk-mesh-show");
+        const chkMarkersShow = document.getElementById("chk-markers-show");
+        const chkPathsShow = document.getElementById("chk-paths-show");
+        const chkPathThrough = document.getElementById("chk-path-through");
+        const chkStaticVolumePoints = document.getElementById("chk-static-volume-points");
+        const btnPanels = document.getElementById("btn-panels");
+        const btnMesh = document.getElementById("btn-mesh");
+        const btnMarkers = document.getElementById("btn-markers");
+        const btnPaths = document.getElementById("btn-paths");
+        const panelTightnessInput = document.getElementById("panel-tightness");
+        const panelTightnessVal = document.getElementById("panel-tightness-val");
+        const panelWrapJitterInput = document.getElementById("panel-wrap-jitter");
+        const panelWrapJitterVal = document.getElementById("panel-wrap-jitter-val");
+        const panelDotDensityInput = document.getElementById("panel-dot-density");
+        const panelDotVal = document.getElementById("panel-dot-val");
+        const panelSeamSeedInput = document.getElementById("panel-seam-seed");
+        const panelSeamSeedVal = document.getElementById("panel-seam-seed-val");
+        const btnPanelSeamReseed = document.getElementById("btn-panel-seam-reseed");
+        const panelLineDashInput = document.getElementById("panel-line-dash");
+        const panelLineVal = document.getElementById("panel-line-val");
+        const panelLinkSkipInput = document.getElementById("panel-link-skip");
+        const panelLinkSkipVal = document.getElementById("panel-link-skip-val");
+        const meshOpacityInput = document.getElementById("mesh-opacity");
+        const meshOpacityVal = document.getElementById("mesh-opacity-val");
+        const markerCountInput = document.getElementById("marker-count");
+        const markerCountVal = document.getElementById("marker-count-val");
+        const markerSizeInput = document.getElementById("marker-size");
+        const markerSizeVal = document.getElementById("marker-size-val");
+        const pathFilletInput = document.getElementById("path-fillet");
+        const pathFilletVal = document.getElementById("path-fillet-val");
+        const pathHandleInput = document.getElementById("path-handle");
+        const pathHandleVal = document.getElementById("path-handle-val");
+        const pathExtendInput = document.getElementById("path-extend");
+        const pathExtendVal = document.getElementById("path-extend-val");
+        const slideAngleInput = document.getElementById("slide-angle");
+        const slideAnimSpeedInput = document.getElementById("slide-anim-speed");
+        const slideOffVInput = document.getElementById("slide-off-v");
+        const slideOffUInput = document.getElementById("slide-off-u");
+        const irregularSeedInput = document.getElementById("irregular-seed");
+        const irregularScaleInput = document.getElementById("irregular-scale");
+        const irregularSeedVal = document.getElementById("irregular-seed-val");
+        const irregularScaleVal = document.getElementById("irregular-scale-val");
+        const slideAngleVal = document.getElementById("slide-angle-val");
+        const slideAnimSpeedVal = document.getElementById("slide-anim-speed-val");
+        const slideOffVVal = document.getElementById("slide-off-v-val");
+        const slideOffUVal = document.getElementById("slide-off-u-val");
+        const ctx = canvas.getContext("2d", { alpha: true });
+
+        /* 12 × 5 × 5 tile volume (topology-scale), centered at origin */
+        const TILE_X = 12;
+        const TILE_Y = 5;
+        const TILE_Z = 5;
+        const HALF_X = TILE_X / 2;
+        const HALF_Y = TILE_Y / 2;
+        const HALF_Z = TILE_Z / 2;
+        /**
+         * Static anchors sit on a shell inset **from the outer solid surface** toward the center:
+         * radial distance from center = (1 − this) × radial distance of the outer shell point.
+         * (Not “6/8 from center” — that would be 0.75× radius; here 6/8 of the span is the inset depth.)
+         */
+        const STATIC_SOLID_INSET_FROM_OUTER_FRAC = 6 / 8;
+        const STATIC_SOLID_RADIAL_FRAC =
+          1 - STATIC_SOLID_INSET_FROM_OUTER_FRAC;
+        /**
+         * Ten fixed (u,v) seeds on the solid; world positions = outer shell at (u,v), then inset above.
+         * Does not use ellipsoidSurfacePoint / axis slide — only base ellipsoid or volume shell.
+         */
+        const STATIC_POINT_UV = [
+          { u: 0.22 * Math.PI, v: 0.12 * 2 * Math.PI },
+          { u: 0.34 * Math.PI, v: 0.33 * 2 * Math.PI },
+          { u: 0.48 * Math.PI, v: 0.58 * 2 * Math.PI },
+          { u: 0.29 * Math.PI, v: 0.81 * 2 * Math.PI },
+          { u: 0.62 * Math.PI, v: 0.09 * 2 * Math.PI },
+          { u: 0.78 * Math.PI, v: 0.37 * 2 * Math.PI },
+          { u: 0.41 * Math.PI, v: 0.49 * 2 * Math.PI },
+          { u: 0.55 * Math.PI, v: 0.72 * 2 * Math.PI },
+          { u: 0.71 * Math.PI, v: 0.91 * 2 * Math.PI },
+          { u: 0.85 * Math.PI, v: 0.22 * 2 * Math.PI },
+        ];
+
+        /* Largest 2:1:1 ellipsoid inscribed in the tile box: 2a≤TILE_X, 2b≤TILE_Y, 2c≤TILE_Z, a=2k,b=k,c=k */
+        const ELLIPSOID_K = Math.min(TILE_X / 4, TILE_Y / 2, TILE_Z / 2);
+        const AX = 2 * ELLIPSOID_K;
+        const BY = ELLIPSOID_K;
+        const CZ = ELLIPSOID_K;
+
+        /** 12×5 “front” = XY plane (camera along ±Z); orthographic (x,y) with no tilt. */
+        const VIEW_FRONT_YAW = 0;
+        const VIEW_FRONT_PITCH = 0;
+
+        const PAD = 40;
+        const U_SEG = 36;
+        const V_SEG = 56;
+        const ROT_SENS = 0.0045;
+        const ZOOM_SENS = 0.0012;
+        const PITCH_MIN = -Math.PI * 0.49;
+        const PITCH_MAX = Math.PI * 0.49;
+        const ZOOM_MIN = 0.15;
+        const ZOOM_MAX = 12;
+
+        /** Phase rate (rad/s equivalent) — slow drift of mesh on surface */
+        const AXIS_SPEED = 0.065;
+        /** Marker threads: straight through nodes with tight mid-segment correction. */
+        const MARKER_FILLET_R_MAX = 3.1;
+        const MARKER_FILLET_FRAC = 0.04;
+        const MARKER_MID_BEND_FRAC = 0.045;
+        /** Panel seam-dot rays: wide length jitter with parabolic profile along each seam. */
+        /** Panel seams/dots sit 1/10 inward from mesh toward center. */
+        const PANEL_INSET_FRAC = 0.1;
+        /** Azimuth slide scale (mixed by slide angle): v' += axisPhase * SLIDE_V * cos(angle) + V offset */
+        const SLIDE_V = 0.55;
+        /** Colatitude wave: u' += sin(phase * SLIDE_U_FREQ + U offset) * SLIDE_U_AMP * sin(angle) */
+        const SLIDE_U_FREQ = 0.14;
+        const SLIDE_U_AMP = 0.38;
+        const U_EPS = 1e-4;
+        /** Irregular mesh: static jitter + extra wobble while slide runs */
+        const IRREG_STATIC = 0.85;
+        const IRREG_SLIDE = 1.05;
+
+        const state = {
+          yaw: VIEW_FRONT_YAW,
+          pitch: VIEW_FRONT_PITCH,
+          zoom: 1,
+          /** Solid mode: false = ellipsoid, true = 12×5×5 volume shell. */
+          showVolume: false,
+          /** Visibility of selected solid geometry overlay. */
+          showSolidGeometry: false,
+          showPanelSeams: false,
+          showPanelDots: true,
+          showMesh: false,
+          /** Meridians / bands / diagonals per family (3–12). */
+          panelTightness: 6,
+          panelUniformWrap: true,
+          panelWrapJitter: 35,
+          /** Which bottom / slide tool popover is open: null when none (e.g. after canvas interaction). */
+          openPopover: null,
+          /** 0 = no dots; 1–100 maps to seam subdivision count. */
+          panelDotDensity: 3,
+          /** Reseeds pseudo-random panel seam geometry (independent of mesh seed). */
+          panelSeamSeed: 0,
+          /** Seam stroke only: 0 = solid line; 1–100 = dashed (dash length scale). */
+          panelLineDash: 42,
+          /** Same seam only: index gap must exceed this to link panel dots. */
+          panelLinkSkip: 2,
+          /** 0…1 multiplier on mesh wire alpha. */
+          meshOpacity: 1,
+          showMarkers: true,
+          showPaths: true,
+          /** Show 10 fixed anchors in volume (independent of mesh slide). */
+          showStaticVolumePoints: true,
+          markerCount: 50,
+          /** 0.5..5 multiplier for marker dot size (default 3x). */
+          markerSizeMul: 3,
+          /** 0..5 multiplier for pathfinder fillet radius. */
+          pathFilletMul: 1,
+          /** 0..2.6 multiplier for offset orb size around each marker node. */
+          pathHandleMul: 1,
+          /** Offset orb rotation angle in screen space (degrees). */
+          pathExtendMul: 0,
+          /** Pathfinder mode: line passes through marker node via opposite offset-orb points. */
+          pathThroughPoints: true,
+          axisSlideAnim: false,
+          /** Multiplier on AXIS_SPEED (100 = default rate). */
+          axisSlideSpeedPct: 100,
+          axisPhase: 0,
+          /** 0° = azimuth-only slide, 90° = colatitude wave only */
+          slideAngleDeg: 50,
+          slideOffsetVDeg: 0,
+          slideOffsetUDeg: 0,
+          /** Shifts hash-based irregular vertex offsets (0…2000) */
+          irregularSeed: 0,
+          /** Jitter amplitude vs baseline (slider 0–250 → 0–2.5×, default 1×) */
+          irregularScale: 1,
+          dragging: false,
+          lastX: 0,
+          lastY: 0,
+          ptrId: null,
+          /** Vertex marker flat index hit on last click, or null. */
+          selectedMarkerFlat: null,
+          /** Index into proximity chains array for highlighted thread, or null. */
+          selectedChainIndex: null,
+        };
+
+        /** Flat vertex indices (i * V_SEG + j) for white markers */
+        const markerFlat = [];
+
+        let axisRaf = null;
+        let axisLastTs = 0;
+
+        function trig() {
+          return {
+            cy: Math.cos(state.yaw),
+            sy: Math.sin(state.yaw),
+            cp: Math.cos(state.pitch),
+            sp: Math.sin(state.pitch),
+          };
+        }
+
+        function project(p, t) {
+          const x1 = p.x * t.cy + p.z * t.sy;
+          const z1 = -p.x * t.sy + p.z * t.cy;
+          const y1 = p.y;
+          const y2 = y1 * t.cp - z1 * t.sp;
+          return { x: x1, y: y2 };
+        }
+
+        function ellipsoidPoint(u, v) {
+          const su = Math.sin(u);
+          const cu = Math.cos(u);
+          const sv = Math.sin(v);
+          const cv = Math.cos(v);
+          return {
+            x: AX * su * cv,
+            y: BY * su * sv,
+            z: CZ * cu,
+          };
+        }
+
+        /** Intersect origin→p ray with 12×5×5 box shell. */
+        function volumeShellPointFromRay(p) {
+          const ax = Math.abs(p.x);
+          const ay = Math.abs(p.y);
+          const az = Math.abs(p.z);
+          const tx = ax > 1e-9 ? HALF_X / ax : Infinity;
+          const ty = ay > 1e-9 ? HALF_Y / ay : Infinity;
+          const tz = az > 1e-9 ? HALF_Z / az : Infinity;
+          const t = Math.min(tx, ty, tz);
+          return { x: p.x * t, y: p.y * t, z: p.z * t };
+        }
+
+        /** Outer solid at (u,v), then inset toward origin by STATIC_SOLID_INSET_FROM_OUTER_FRAC of the radius. */
+        function staticSolidOffsetPoint(u, v) {
+          const p0 = ellipsoidPoint(u, v);
+          const r = STATIC_SOLID_RADIAL_FRAC;
+          if (state.showVolume) {
+            const pOuter = volumeShellPointFromRay(p0);
+            return {
+              x: pOuter.x * r,
+              y: pOuter.y * r,
+              z: pOuter.z * r,
+            };
+          }
+          return { x: p0.x * r, y: p0.y * r, z: p0.z * r };
+        }
+
+        function staticAnchorPoint3(i) {
+          const uv = STATIC_POINT_UV[i];
+          return staticSolidOffsetPoint(uv.u, uv.v);
+        }
+
+        /** Base solid shell sample (no axis-slide drift): ellipsoid or volume shell. */
+        function solidShellPointNoSlide(u, v) {
+          const p = ellipsoidPoint(u, v);
+          return state.showVolume ? volumeShellPointFromRay(p) : p;
+        }
+
+        function wrapV(v) {
+          const tw = 2 * Math.PI;
+          let x = v % tw;
+          if (x < 0) x += tw;
+          return x;
+        }
+
+        function hash2(a, b) {
+          const s = state.irregularSeed;
+          const x =
+            Math.sin(a * 127.1 + b * 311.7 + 74.3 + s * 0.031415926) * 43758.5453123;
+          return x - Math.floor(x);
+        }
+
+        /** Stable pseudo-random for ball panel seams (independent of mesh seed). */
+        function hashPanel(a, b) {
+          const seed = state.panelSeamSeed;
+          const x =
+            Math.sin(
+              a * 131.7 +
+                b * 307.9 +
+                91.2 +
+                seed * 0.0173 +
+                seed * 0.000019 * (a * 7 + b * 13),
+            ) * 43758.5453123;
+          return x - Math.floor(x);
+        }
+
+        /** Map UI density 0–100 to polyline subdivisions for dots (0 = none). */
+        function panelDotDivisionsFromDensity() {
+          const p = Math.max(0, Math.min(100, state.panelDotDensity | 0));
+          if (p <= 0) return 0;
+          return Math.max(8, Math.min(480, 8 + Math.floor((p / 100) * 472)));
+        }
+
+        /** Meridians / transverse / diagonal seams per family (slider 3–12). */
+        function panelSeamCountFromTightness() {
+          return Math.max(3, Math.min(12, state.panelTightness | 0));
+        }
+
+        /** Jitter (u,v) per grid cell so the mesh is irregular; extra motion when slide runs. */
+        function meshVertexUV(u, v, i, j) {
+          const du = Math.PI / Math.max(1, U_SEG - 1);
+          const dv = (2 * Math.PI) / V_SEG;
+          const sc = state.irregularScale;
+          const s0 = state.irregularSeed * 0.001;
+          const h0 = hash2(i + s0, j + s0 * 0.7);
+          const h1 = hash2(i + 13 + s0 * 1.3, j + 29 + s0 * 0.9);
+          const h2 = hash2(i + 101, j + 7 + s0 * 1.1);
+          let uu = u + (h0 - 0.5) * IRREG_STATIC * du * 2.2 * sc;
+          let vv = v + (h1 - 0.5) * IRREG_STATIC * dv * 2.2 * sc;
+          if (state.axisSlideAnim) {
+            uu += Math.sin(state.axisPhase * 0.73 + h2 * 6.28318) * IRREG_SLIDE * du * sc;
+            vv += Math.cos(state.axisPhase * 0.51 + h0 * 12.566) * IRREG_SLIDE * dv * sc;
+          }
+          uu = Math.max(U_EPS, Math.min(Math.PI - U_EPS, uu));
+          vv = wrapV(vv);
+          return { u: uu, v: vv };
+        }
+
+        function meshSurfacePoint(u, v, i, j) {
+          const uv = meshVertexUV(u, v, i, j);
+          return ellipsoidSurfacePoint(uv.u, uv.v);
+        }
+
+        /** Mesh slide controls apply always; animation only advances phase over time. */
+        function ellipsoidSurfacePoint(u, v) {
+          const ang = (state.slideAngleDeg * Math.PI) / 180;
+          const offV = (state.slideOffsetVDeg * Math.PI) / 180;
+          const offU = (state.slideOffsetUDeg * Math.PI) / 180;
+          const vSlide = state.axisPhase * SLIDE_V * Math.cos(ang) + offV;
+          const uNudge =
+            Math.sin(state.axisPhase * SLIDE_U_FREQ + offU) * SLIDE_U_AMP * Math.sin(ang);
+          const uu = u + uNudge;
+          const uClamped = Math.max(U_EPS, Math.min(Math.PI - U_EPS, uu));
+          return solidShellPointNoSlide(uClamped, wrapV(v + vSlide));
+        }
+
+        function expandBounds(q, b) {
+          if (q.x < b.minX) b.minX = q.x;
+          if (q.x > b.maxX) b.maxX = q.x;
+          if (q.y < b.minY) b.minY = q.y;
+          if (q.y > b.maxY) b.maxY = q.y;
+        }
+
+        function boundsScene(t) {
+          let minX = Infinity;
+          let maxX = -Infinity;
+          let minY = Infinity;
+          let maxY = -Infinity;
+          const b = { minX, maxX, minY, maxY };
+
+          const du = Math.PI / Math.max(1, U_SEG - 1);
+          const dv = (2 * Math.PI) / V_SEG;
+          for (let i = 0; i < U_SEG; i++) {
+            for (let j = 0; j < V_SEG; j++) {
+              expandBounds(project(solidShellPointNoSlide(i * du, j * dv), t), b);
+            }
+          }
+
+          if (state.showPaths || state.showStaticVolumePoints) {
+            for (let i = 0; i < STATIC_POINT_UV.length; i++) {
+              expandBounds(project(staticAnchorPoint3(i), t), b);
+            }
+          }
+
+          if (state.showVolume) {
+            for (const sx of [-1, 1]) {
+              for (const sy of [-1, 1]) {
+                for (const sz of [-1, 1]) {
+                  expandBounds(
+                    project({ x: sx * HALF_X, y: sy * HALF_Y, z: sz * HALF_Z }, t),
+                    b
+                  );
+                }
+              }
+            }
+          }
+
+          return b;
+        }
+
+        function makeToCanvas(cw, ch, b) {
+          const bw = b.maxX - b.minX;
+          const bh = b.maxY - b.minY;
+          const availW = Math.max(1, cw - 2 * PAD);
+          const availH = Math.max(1, ch - 2 * PAD);
+          const baseScale = Math.min(availW / bw, availH / bh);
+          const scale = baseScale * state.zoom;
+          const cx = (b.minX + b.maxX) * 0.5;
+          const cy0 = (b.minY + b.maxY) * 0.5;
+          return function toCanvas(q) {
+            return {
+              x: (q.x - cx) * scale + cw * 0.5,
+              y: (q.y - cy0) * scale + ch * 0.5,
+            };
+          };
+        }
+
+        function drawEllipsoidWireframe(toCanvas, t) {
+          const du = Math.PI / Math.max(1, U_SEG - 1);
+          const dv = (2 * Math.PI) / V_SEG;
+
+          ctx.beginPath();
+          for (let j = 0; j < V_SEG; j++) {
+            const v = j * dv;
+            for (let i = 0; i < U_SEG - 1; i++) {
+              const u0 = i * du;
+              const u1 = (i + 1) * du;
+              const p0 = toCanvas(project(meshSurfacePoint(u0, v, i, j), t));
+              const p1 = toCanvas(project(meshSurfacePoint(u1, v, i + 1, j), t));
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+            }
+          }
+          for (let i = 0; i < U_SEG; i++) {
+            const u = i * du;
+            for (let j = 0; j < V_SEG; j++) {
+              const v0 = j * dv;
+              const v1 = ((j + 1) % V_SEG) * dv;
+              const jn = (j + 1) % V_SEG;
+              const p0 = toCanvas(project(meshSurfacePoint(u, v0, i, j), t));
+              const p1 = toCanvas(project(meshSurfacePoint(u, v1, i, jn), t));
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+            }
+          }
+          ctx.strokeStyle = `rgba(255, 255, 255, ${0.42 * Math.max(0.08, Math.min(1, state.meshOpacity))})`;
+          ctx.stroke();
+        }
+
+        /** Solid overlay for ellipsoid mode (independent of irregular mesh opacity controls). */
+        function drawEllipsoidSolidGeometry(toCanvas, t) {
+          const du = Math.PI / Math.max(1, U_SEG - 1);
+          const dv = (2 * Math.PI) / V_SEG;
+          ctx.beginPath();
+          for (let j = 0; j < V_SEG; j++) {
+            const v = j * dv;
+            for (let i = 0; i < U_SEG - 1; i++) {
+              const u0 = i * du;
+              const u1 = (i + 1) * du;
+              const p0 = toCanvas(project(solidShellPointNoSlide(u0, v), t));
+              const p1 = toCanvas(project(solidShellPointNoSlide(u1, v), t));
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+            }
+          }
+          for (let i = 0; i < U_SEG; i++) {
+            const u = i * du;
+            for (let j = 0; j < V_SEG; j++) {
+              const v0 = j * dv;
+              const v1 = ((j + 1) % V_SEG) * dv;
+              const p0 = toCanvas(project(solidShellPointNoSlide(u, v0), t));
+              const p1 = toCanvas(project(solidShellPointNoSlide(u, v1), t));
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+            }
+          }
+          ctx.strokeStyle = "rgba(0, 210, 255, 0.22)";
+          ctx.stroke();
+        }
+
+        function rebuildMarkers() {
+          const total = U_SEG * V_SEG;
+          const n = Math.min(Math.max(0, state.markerCount | 0), total);
+          markerFlat.length = 0;
+          if (n === 0) {
+            state.selectedMarkerFlat = null;
+            state.selectedChainIndex = null;
+            return;
+          }
+          const order = [];
+          for (let i = 0; i < total; i++) order.push(i);
+          let rng = 2166136261;
+          function nextRand() {
+            rng = (Math.imul(rng, 48271) + 11) >>> 0;
+            return rng / 4294967296;
+          }
+          for (let i = total - 1; i > 0; i--) {
+            const j = Math.floor(nextRand() * (i + 1));
+            const tmp = order[i];
+            order[i] = order[j];
+            order[j] = tmp;
+          }
+          for (let k = 0; k < n; k++) markerFlat.push(order[k]);
+          if (
+            state.selectedMarkerFlat != null &&
+            markerFlat.indexOf(state.selectedMarkerFlat) < 0
+          ) {
+            state.selectedMarkerFlat = null;
+            state.selectedChainIndex = null;
+          }
+        }
+
+        function markerScreenPos(flat, toCanvas, t) {
+          const du = Math.PI / Math.max(1, U_SEG - 1);
+          const dv = (2 * Math.PI) / V_SEG;
+          const j = flat % V_SEG;
+          const i = Math.floor(flat / V_SEG);
+          const u = i * du;
+          const v = j * dv;
+          return toCanvas(project(meshSurfacePoint(u, v, i, j), t));
+        }
+
+        function pairHash01(f0, f1, salt) {
+          const h = ((f0 * 73856093) ^ (f1 * 19349663) ^ (salt * 83492791)) >>> 0;
+          return h / 4294967296;
+        }
+
+        function strokeConnectionWideBezier(ax, ay, bx, by, curl01, idA, idB, seamS) {
+          const dx = bx - ax;
+          const dy = by - ay;
+          const len = Math.hypot(dx, dy);
+          if (len < 1.2) return;
+          const ux = dx / len;
+          const uy = dy / len;
+          const px = -uy;
+          const py = ux;
+          const c = Math.max(0, Math.min(1, curl01));
+          const h1 = pairHash01(idA, idB, seamS);
+          const h2 = pairHash01(idA, idB, seamS + 23);
+          const s1 = pairHash01(idA, idB, seamS + 41) < 0.5 ? -1 : 1;
+          const s2 = pairHash01(idA, idB, seamS + 59) < 0.5 ? -1 : 1;
+          const bulge = c * len * 0.38;
+          const t1 = 0.26 + h1 * 0.12;
+          const t2 = 0.62 + h2 * 0.12;
+          const cp1x = ax + ux * len * t1 + px * s1 * bulge * (0.4 + 0.6 * h1);
+          const cp1y = ay + uy * len * t1 + py * s1 * bulge * (0.4 + 0.6 * h1);
+          const cp2x = ax + ux * len * t2 + px * s2 * bulge * (0.35 + 0.65 * h2);
+          const cp2y = ay + uy * len * t2 + py * s2 * bulge * (0.35 + 0.65 * h2);
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, bx, by);
+          ctx.stroke();
+        }
+
+        /**
+         * Wide cubic Bézier with start tangent along unit (tx, ty); end uses chord toward target.
+         * `strandJitter` scales extra lateral wobble so strands are not straight (0–1).
+         */
+        function strokeConnectionWideBezierTangentStart(
+          ax,
+          ay,
+          bx,
+          by,
+          tx,
+          ty,
+          curl01,
+          idA,
+          idB,
+          seamS,
+          strandJitter,
+        ) {
+          const dx = bx - ax;
+          const dy = by - ay;
+          const len = Math.hypot(dx, dy);
+          if (len < 1.2) return;
+          const ux = dx / len;
+          const uy = dy / len;
+          const px = -ty;
+          const py = tx;
+          const qx = -uy;
+          const qy = ux;
+          const c = Math.max(0, Math.min(1, curl01));
+          const h1 = pairHash01(idA, idB, seamS);
+          const h2 = pairHash01(idA, idB, seamS + 23);
+          const s1 = pairHash01(idA, idB, seamS + 41) < 0.5 ? -1 : 1;
+          const s2 = pairHash01(idA, idB, seamS + 59) < 0.5 ? -1 : 1;
+          const sj =
+            strandJitter !== undefined && strandJitter !== null
+              ? strandJitter
+              : 0.48;
+          const bulge = c * len * 0.38 * (1 + 0.62 * sj);
+          const t1 = 0.24 + h1 * 0.14;
+          const t2 = 0.58 + h2 * 0.14;
+          const w1 = len * 0.085 * sj * (pairHash01(idA, idB, seamS + 211) - 0.5) * 2;
+          const w2 = len * 0.055 * sj * (pairHash01(idA, idB, seamS + 223) - 0.5) * 2;
+          const cp1x =
+            ax +
+            tx * len * t1 +
+            px * s1 * bulge * (0.4 + 0.6 * h1) +
+            px * w1;
+          const cp1y =
+            ay +
+            ty * len * t1 +
+            py * s1 * bulge * (0.4 + 0.6 * h1) +
+            py * w1;
+          const cp2x =
+            ax +
+            ux * len * t2 +
+            qx * s2 * bulge * (0.35 + 0.65 * h2) +
+            qx * w2 +
+            px * w1 * 0.55;
+          const cp2y =
+            ay +
+            uy * len * t2 +
+            qy * s2 * bulge * (0.35 + 0.65 * h2) +
+            qy * w2 +
+            py * w1 * 0.55;
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, bx, by);
+          ctx.stroke();
+        }
+
+        function panelLinkAllowedSameSeam(ciA, mA, ciB, mB, skip) {
+          if (ciA !== ciB) return true;
+          return Math.abs(mA - mB) > skip;
+        }
+
+        /**
+         * One marker-to-marker segment with correction fillet in middle-third chord span:
+         * corner target K is placed along A→B at t in [1/3, 2/3], then offset normal.
+         */
+        function drawMarkerMidFilletSegment(A, B, idA, idB, salt) {
+          const dx = B.x - A.x;
+          const dy = B.y - A.y;
+          const len = Math.hypot(dx, dy);
+          if (len < 1e-6) return;
+          const ux = dx / len;
+          const uy = dy / len;
+          const nx = -uy;
+          const ny = ux;
+          const t = 1 / 3 + pairHash01(idA, idB, salt + 17) * (1 / 3);
+          const sign = pairHash01(idA, idB, salt + 29) < 0.5 ? -1 : 1;
+          const bend = sign * MARKER_MID_BEND_FRAC * len;
+          const K = {
+            x: A.x + ux * (t * len) + nx * bend,
+            y: A.y + uy * (t * len) + ny * bend,
+          };
+          const r = Math.max(
+            0.85,
+            Math.min(MARKER_FILLET_R_MAX, MARKER_FILLET_FRAC * len),
+          ) * state.pathFilletMul;
+          if (r <= 0) {
+            ctx.beginPath();
+            ctx.moveTo(A.x, A.y);
+            ctx.lineTo(B.x, B.y);
+            ctx.stroke();
+            return;
+          }
+          ctx.beginPath();
+          ctx.moveTo(A.x, A.y);
+          ctx.arcTo(K.x, K.y, B.x, B.y, r);
+          ctx.lineTo(B.x, B.y);
+          ctx.stroke();
+        }
+
+        /** A→B→C→D with per-segment middle-third fillets (AB, BC, CD). */
+        function strokeMarkerChainElbows(A, B, C, D, f1, f2, f3, f4) {
+          drawMarkerMidFilletSegment(A, B, f1, f2, 1);
+          drawMarkerMidFilletSegment(B, C, f2, f3, 2);
+          drawMarkerMidFilletSegment(C, D, f3, f4, 3);
+        }
+
+        function flatToWorld3(flat, t) {
+          const du = Math.PI / Math.max(1, U_SEG - 1);
+          const dv = (2 * Math.PI) / V_SEG;
+          const j = flat % V_SEG;
+          const i = Math.floor(flat / V_SEG);
+          const u = i * du;
+          const v = j * dv;
+          return meshSurfacePoint(u, v, i, j);
+        }
+
+        function distWorld3(a, b) {
+          return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+        }
+
+        /**
+         * Greedy chains of four markers along surface proximity (nearest-neighbor from a seed),
+         * so paths tend to wrap the ellipsoid instead of jumping across quarters of the list.
+         */
+        function buildMarkerChainsProximity(t) {
+          const n = markerFlat.length;
+          let q = Math.floor(n / 8);
+          if (q < 1 && n >= 4) q = 1;
+          if (q < 1) return [];
+          const world = [];
+          for (let k = 0; k < n; k++) world.push(flatToWorld3(markerFlat[k], t));
+          const unused = new Set();
+          for (let k = 0; k < n; k++) unused.add(k);
+          const chains = [];
+          for (let c = 0; c < q; c++) {
+            let minK = null;
+            let minFlat = Infinity;
+            for (const k of unused) {
+              if (markerFlat[k] < minFlat) {
+                minFlat = markerFlat[k];
+                minK = k;
+              }
+            }
+            if (minK === null) break;
+            const m1 = minK;
+            unused.delete(m1);
+            function nearestIdx(fromK) {
+              const p = world[fromK];
+              let bestK = null;
+              let bestD = Infinity;
+              for (const k of unused) {
+                const d = distWorld3(p, world[k]);
+                if (d < bestD) {
+                  bestD = d;
+                  bestK = k;
+                }
+              }
+              return bestK;
+            }
+            const k2 = nearestIdx(m1);
+            if (k2 === null) break;
+            unused.delete(k2);
+            const k3 = nearestIdx(k2);
+            if (k3 === null) break;
+            unused.delete(k3);
+            const k4 = nearestIdx(k3);
+            if (k4 === null) break;
+            unused.delete(k4);
+            chains.push([markerFlat[m1], markerFlat[k2], markerFlat[k3], markerFlat[k4]]);
+          }
+          return chains;
+        }
+
+        function findChainIndexForFlat(flat, chains) {
+          if (!chains) return null;
+          for (let i = 0; i < chains.length; i++) {
+            if (chains[i].indexOf(flat) >= 0) return i;
+          }
+          return null;
+        }
+
+        function pickMarkerAtCanvas(clientX, clientY, toCanvas, t) {
+          const rect = canvas.getBoundingClientRect();
+          const px = clientX - rect.left;
+          const py = clientY - rect.top;
+          const hitR = 4.5 + 3.2 * state.markerSizeMul;
+          for (let k = 0; k < markerFlat.length; k++) {
+            const flat = markerFlat[k];
+            const c = markerScreenPos(flat, toCanvas, t);
+            if (Math.hypot(c.x - px, c.y - py) <= hitR) return flat;
+          }
+          return null;
+        }
+
+        function drawMarkerConnections(toCanvas, t, chains) {
+          if (!chains || chains.length === 0) return;
+          const hi = state.selectedChainIndex;
+          ctx.save();
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          ctx.setLineDash([]);
+
+          function strokeChain(flats, highlight) {
+            const f1 = flats[0];
+            const f2 = flats[1];
+            const f3 = flats[2];
+            const f4 = flats[3];
+            const p1 = markerScreenPos(f1, toCanvas, t);
+            const p2 = markerScreenPos(f2, toCanvas, t);
+            const p3 = markerScreenPos(f3, toCanvas, t);
+            const p4 = markerScreenPos(f4, toCanvas, t);
+            ctx.lineWidth = highlight ? 2.1 : 0.72;
+            ctx.strokeStyle = highlight
+              ? "rgba(0, 248, 255, 0.92)"
+              : "rgba(0, 225, 255, 0.32)";
+            strokeMarkerChainElbows(p1, p2, p3, p4, f1, f2, f3, f4);
+          }
+
+          for (let i = 0; i < chains.length; i++) {
+            if (i !== hi) strokeChain(chains[i], false);
+          }
+          if (hi != null && hi >= 0 && hi < chains.length) {
+            strokeChain(chains[hi], true);
+          }
+
+          ctx.restore();
+        }
+
+        /**
+         * Trust zone — rigid lattice vs routed “stadium” paths.
+         * Standardized vocabulary: TRUST_FILLETS_PX (4 radii), TRUST_KNEE (90° orth stubs).
+         * Routed links use an outer ellipse loop; the long arc avoids cutting through the infield.
+         */
+        const TRUST_GRID_STEP_FRAC = 0.036;
+        const TRUST_FILLETS_PX = [4, 8, 14, 22];
+        const TWO_PI_TRUST = Math.PI * 2;
+
+        function trustFilletPick(idA, idB, salt) {
+          const k =
+            (Math.imul(idA | 0, 73856093) ^
+              Math.imul(idB | 0, 19349663) ^
+              Math.imul(salt | 0, 83492791)) >>>
+            0;
+          return TRUST_FILLETS_PX[k % TRUST_FILLETS_PX.length];
+        }
+
+        function trustShortestAngleDelta(th0, th1) {
+          let d = th1 - th0;
+          while (d > Math.PI) d -= TWO_PI_TRUST;
+          while (d <= -Math.PI) d += TWO_PI_TRUST;
+          return d;
+        }
+
+        /** Long-way sweep around ellipse (running the bend, not the infield chord). */
+        function trustLongEllipseDelta(th0, th1) {
+          const dShort = trustShortestAngleDelta(th0, th1);
+          if (Math.abs(dShort) < 1e-10) return TWO_PI_TRUST;
+          return dShort > 0 ? dShort - TWO_PI_TRUST : TWO_PI_TRUST + dShort;
+        }
+
+        function trustEllipsePoint(ell, th) {
+          return {
+            x: ell.cx + ell.rx * Math.cos(th),
+            y: ell.cy + ell.ry * Math.sin(th),
+          };
+        }
+
+        function trustNearestTheta(px, py, ell) {
+          return Math.atan2((py - ell.cy) / ell.ry, (px - ell.cx) / ell.rx);
+        }
+
+        function trustClampFillet(r, segLen) {
+          const m = Math.max(2.5, segLen * 0.42);
+          return Math.min(r, m);
+        }
+
+        /**
+         * S → 90° orth stub (one arcTo, radius from TRUST_FILLETS_PX) → long ellipse lap →
+         * 90° stub → H. Only those fillet sizes; only right-angle knees on stubs.
+         * `laneExpandPx` offsets the loop (outer lanes).
+         */
+        function strokeStadiumRouted(
+          sx,
+          sy,
+          hx,
+          hy,
+          ellBase,
+          idA,
+          idB,
+          salt,
+          laneExpandPx,
+        ) {
+          const ell = {
+            cx: ellBase.cx,
+            cy: ellBase.cy,
+            rx: ellBase.rx + laneExpandPx,
+            ry: ellBase.ry + laneExpandPx,
+          };
+          const dx0 = hx - sx;
+          const dy0 = hy - sy;
+          const len0 = Math.hypot(dx0, dy0);
+          if (len0 < 2) return;
+          const nx = -dy0 / len0;
+          const ny = dx0 / len0;
+          sx += nx * laneExpandPx * 0.28;
+          sy += ny * laneExpandPx * 0.28;
+          hx += nx * laneExpandPx * 0.28;
+          hy += ny * laneExpandPx * 0.28;
+
+          const thS = trustNearestTheta(sx, sy, ell);
+          const thH = trustNearestTheta(hx, hy, ell);
+          const E0 = trustEllipsePoint(ell, thS);
+          const E1 = trustEllipsePoint(ell, thH);
+          const longD = trustLongEllipseDelta(thS, thH);
+          const arcSeg = Math.max(
+            32,
+            Math.min(
+              100,
+              Math.ceil((Math.abs(longD) / TWO_PI_TRUST) * 80),
+            ),
+          );
+          const legIn = Math.hypot(E0.x - sx, E0.y - sy);
+          const legOut = Math.hypot(E1.x - hx, E1.y - hy);
+          const rKneeIn = trustClampFillet(trustFilletPick(idA, idB, salt), legIn);
+          const rKneeOut = trustClampFillet(
+            TRUST_FILLETS_PX[(salt + 9) % TRUST_FILLETS_PX.length],
+            legOut,
+          );
+
+          const horizFirst = Math.abs(E0.x - sx) >= Math.abs(E0.y - sy);
+          const horizFirstOut = Math.abs(hx - E1.x) >= Math.abs(hy - E1.y);
+
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          if (horizFirst) {
+            ctx.arcTo(E0.x, sy, E0.x, E0.y, rKneeIn);
+          } else {
+            ctx.arcTo(sx, E0.y, E0.x, E0.y, rKneeIn);
+          }
+          ctx.lineTo(E0.x, E0.y);
+          for (let k = 1; k <= arcSeg; k++) {
+            const th = thS + longD * (k / arcSeg);
+            const p = trustEllipsePoint(ell, th);
+            ctx.lineTo(p.x, p.y);
+          }
+          if (horizFirstOut) {
+            ctx.arcTo(E1.x, hy, hx, hy, rKneeOut);
+          } else {
+            ctx.arcTo(hx, E1.y, hx, hy, rKneeOut);
+          }
+          ctx.lineTo(hx, hy);
+          ctx.stroke();
+        }
+
+        function trustTrackEllipseBase(coreC, chassisW, chassisH) {
+          const pad = Math.max(14, Math.min(chassisW, chassisH) * 0.14);
+          return {
+            cx: coreC.x,
+            cy: coreC.y,
+            rx: chassisW * 0.58 + pad,
+            ry: chassisH * 0.68 + pad,
+          };
+        }
+
+        function trustCoreHubs3D() {
+          const step = Math.min(AX, BY, CZ) * TRUST_GRID_STEP_FRAC;
+          const out = [];
+          for (let gx = -1; gx <= 1; gx++) {
+            for (let gy = -1; gy <= 1; gy++) {
+              for (let gz = -1; gz <= 0; gz++) {
+                out.push({ x: gx * step, y: gy * step, z: gz * step });
+              }
+            }
+          }
+          return out;
+        }
+
+        function trustGridManhattan3(a, b) {
+          const step = Math.min(AX, BY, CZ) * TRUST_GRID_STEP_FRAC;
+          const q = step > 1e-9 ? 1 / step : 1;
+          const gxa = Math.round(a.x * q);
+          const gya = Math.round(a.y * q);
+          const gza = Math.round(a.z * q);
+          const gxb = Math.round(b.x * q);
+          const gyb = Math.round(b.y * q);
+          const gzb = Math.round(b.z * q);
+          return (
+            Math.abs(gxa - gxb) +
+            Math.abs(gya - gyb) +
+            Math.abs(gza - gzb)
+          );
+        }
+
+        function drawTrustZoneCore(toCanvas, t) {
+          if (!state.showPaths || STATIC_POINT_UV.length < 2) return;
+          const hubs3 = trustCoreHubs3D();
+          const hubScr = hubs3.map((p) => toCanvas(project(p, t)));
+          const coreC = toCanvas(project({ x: 0, y: 0, z: 0 }, t));
+          const nStatic = STATIC_POINT_UV.length;
+          const staticScr = [];
+          for (let i = 0; i < nStatic; i++) {
+            staticScr.push(toCanvas(project(staticAnchorPoint3(i), t)));
+          }
+
+          ctx.save();
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+
+          const maxDim = Math.max(
+            canvas.clientWidth || 400,
+            canvas.clientHeight || 400,
+          );
+          const chassisW = Math.min(maxDim * 0.1, 128);
+          const chassisH = Math.min(maxDim * 0.068, 88);
+          const ellBase = trustTrackEllipseBase(coreC, chassisW, chassisH);
+          const rx = 3;
+          const cx0 = coreC.x - chassisW * 0.5;
+          const cy0 = coreC.y - chassisH * 0.5;
+
+          /* Rack / enclosure: dark panel, cold aisle rim */
+          ctx.fillStyle = "rgba(8, 14, 28, 0.78)";
+          ctx.beginPath();
+          if (typeof ctx.roundRect === "function") {
+            ctx.roundRect(cx0, cy0, chassisW, chassisH, rx);
+          } else {
+            ctx.rect(cx0, cy0, chassisW, chassisH);
+          }
+          ctx.fill();
+          ctx.strokeStyle = "rgba(0, 210, 195, 0.48)";
+          ctx.lineWidth = 1.15;
+          ctx.stroke();
+
+          /* Rigid grid — cross-hatch inside chassis (tension vs flowing lanes below) */
+          ctx.strokeStyle = "rgba(0, 140, 165, 0.16)";
+          ctx.lineWidth = 0.65;
+          ctx.lineJoin = "miter";
+          ctx.lineCap = "butt";
+          const nBars = 4;
+          const nCols = 5;
+          for (let b = 1; b < nBars; b++) {
+            const yy = cy0 + (chassisH * b) / nBars;
+            ctx.beginPath();
+            ctx.moveTo(cx0 + 4, yy);
+            ctx.lineTo(cx0 + chassisW - 4, yy);
+            ctx.stroke();
+          }
+          for (let c = 1; c < nCols; c++) {
+            const xx = cx0 + (chassisW * c) / nCols;
+            ctx.beginPath();
+            ctx.moveTo(xx, cy0 + 4);
+            ctx.lineTo(xx, cy0 + chassisH - 4);
+            ctx.stroke();
+          }
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+
+          /* Crown jewels — soft vault marker */
+          const vaultR = Math.min(10, chassisW * 0.09);
+          ctx.fillStyle = "rgba(255, 200, 72, 0.1)";
+          ctx.strokeStyle = "rgba(255, 210, 120, 0.75)";
+          ctx.lineWidth = 1.05;
+          ctx.beginPath();
+          if (typeof ctx.roundRect === "function") {
+            ctx.roundRect(
+              coreC.x - vaultR,
+              coreC.y - vaultR,
+              vaultR * 2,
+              vaultR * 2,
+              2,
+            );
+          } else {
+            ctx.rect(coreC.x - vaultR, coreC.y - vaultR, vaultR * 2, vaultR * 2);
+          }
+          ctx.fill();
+          ctx.stroke();
+          ctx.strokeStyle = "rgba(255, 230, 160, 0.38)";
+          ctx.lineWidth = 0.6;
+          ctx.strokeRect(
+            coreC.x - vaultR * 0.55,
+            coreC.y - vaultR * 0.55,
+            vaultR * 1.1,
+            vaultR * 1.1,
+          );
+
+          const nh = hubScr.length;
+          const centerIdx = hubs3.findIndex(
+            (p) => p.x === 0 && p.y === 0 && p.z === 0,
+          );
+          const vaultIdx = centerIdx >= 0 ? centerIdx : 0;
+
+          /* Blade ticks — rectilinear anchors on lattice */
+          for (let hi = 0; hi < nh; hi++) {
+            const H = hubScr[hi];
+            const isVault = hi === vaultIdx;
+            const bw = isVault ? 0 : 3.2;
+            const bh = isVault ? 0 : 2.4;
+            if (!isVault) {
+              ctx.fillStyle = "rgba(18, 32, 52, 0.92)";
+              ctx.fillRect(H.x - bw * 0.5, H.y - bh * 0.5, bw, bh);
+              ctx.strokeStyle = "rgba(0, 200, 185, 0.58)";
+              ctx.lineWidth = 0.75;
+              ctx.strokeRect(H.x - bw * 0.5, H.y - bh * 0.5, bw, bh);
+            }
+          }
+
+          /* Rigid graph: straight edges only between grid neighbors */
+          ctx.lineJoin = "miter";
+          ctx.lineCap = "butt";
+          for (let i = 0; i < nh; i++) {
+            for (let j = i + 1; j < nh; j++) {
+              if (trustGridManhattan3(hubs3[i], hubs3[j]) !== 1) continue;
+              const p = pairHash01(i, j, 701);
+              const ax = hubScr[i].x;
+              const ay = hubScr[i].y;
+              const bx = hubScr[j].x;
+              const by = hubScr[j].y;
+              ctx.strokeStyle = `rgba(0, 195, 178, ${0.28 + p * 0.22})`;
+              ctx.lineWidth = 0.88 + p * 0.35;
+              ctx.setLineDash([]);
+              ctx.beginPath();
+              ctx.moveTo(ax, ay);
+              ctx.lineTo(bx, by);
+              ctx.stroke();
+              if (pairHash01(i, j, 702) > 0.52) {
+                ctx.strokeStyle = `rgba(100, 255, 230, ${0.1 + p * 0.08})`;
+                ctx.lineWidth = 0.4;
+                ctx.setLineDash([3, 4]);
+                ctx.beginPath();
+                ctx.moveTo(ax, ay);
+                ctx.lineTo(bx, by);
+                ctx.stroke();
+                ctx.setLineDash([]);
+              }
+            }
+          }
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+
+          /* Static ↔ static — outer-lap routing only (long ellipse), standardized fillets */
+          for (let i = 0; i < nStatic; i++) {
+            for (let j = i + 1; j < nStatic; j++) {
+              if (pairHash01(i, j, 1203) > 0.52) continue;
+              const w = pairHash01(i, j, 1205);
+              ctx.strokeStyle = `rgba(100, 220, 255, ${0.11 + w * 0.12})`;
+              ctx.lineWidth = 0.48 + w * 0.28;
+              ctx.setLineDash([]);
+              strokeStadiumRouted(
+                staticScr[i].x,
+                staticScr[i].y,
+                staticScr[j].x,
+                staticScr[j].y,
+                ellBase,
+                i + 3000,
+                j + 3000,
+                1400 + i * 41 + j,
+                0,
+              );
+            }
+          }
+
+          /* Uplinks: dual outer lanes + center ghost — same stadium vocabulary */
+          const lane = 2.4;
+          for (let si = 0; si < nStatic; si++) {
+            const S = staticScr[si];
+            for (let hi = 0; hi < nh; hi++) {
+              const pick =
+                pairHash01(si + 11, hi + 3, 902) > 0.38 ||
+                (si + hi) % 3 === 0;
+              if (!pick) continue;
+              const H = hubScr[hi];
+              const w = pairHash01(si, hi, 910);
+              ctx.strokeStyle = `rgba(0, 225, 205, ${0.38 + w * 0.26})`;
+              ctx.lineWidth = 0.92 + w * 0.42;
+              ctx.setLineDash([]);
+              strokeStadiumRouted(
+                S.x,
+                S.y,
+                H.x,
+                H.y,
+                ellBase,
+                si + 2000,
+                hi + 5000,
+                1200 + si * 17 + hi,
+                -lane,
+              );
+              strokeStadiumRouted(
+                S.x,
+                S.y,
+                H.x,
+                H.y,
+                ellBase,
+                si + 2050,
+                hi + 5050,
+                1250 + si * 19 + hi,
+                lane,
+              );
+              ctx.strokeStyle = `rgba(160, 255, 240, ${0.12 + w * 0.1})`;
+              ctx.lineWidth = 0.36;
+              ctx.setLineDash([4, 5]);
+              strokeStadiumRouted(
+                S.x,
+                S.y,
+                H.x,
+                H.y,
+                ellBase,
+                si + 2100,
+                hi + 5100,
+                1300 + si * 23 + hi,
+                0,
+              );
+              ctx.setLineDash([]);
+            }
+          }
+
+          ctx.restore();
+        }
+
+        function drawFixedPaths(toCanvas, t) {
+          if (!state.showPaths || STATIC_POINT_UV.length < 2) return;
+          const pts = [];
+          for (let i = 0; i < STATIC_POINT_UV.length; i++) {
+            pts.push(toCanvas(project(staticAnchorPoint3(i), t)));
+          }
+          const n = pts.length;
+          const tang = new Array(n);
+          const rot = (state.pathExtendMul * Math.PI) / 180;
+          const cr = Math.cos(rot);
+          const sr = Math.sin(rot);
+          const orbR = 6.2 * state.pathHandleMul;
+          const inPts = new Array(n);
+          const outPts = new Array(n);
+          for (let i = 0; i < n; i++) {
+            const prev =
+              i > 0
+                ? pts[i - 1]
+                : {
+                    x: pts[0].x - (pts[1].x - pts[0].x),
+                    y: pts[0].y - (pts[1].y - pts[0].y),
+                  };
+            const next =
+              i < n - 1
+                ? pts[i + 1]
+                : {
+                    x: pts[n - 1].x + (pts[n - 1].x - pts[n - 2].x),
+                    y: pts[n - 1].y + (pts[n - 1].y - pts[n - 2].y),
+                  };
+            const dx = next.x - prev.x;
+            const dy = next.y - prev.y;
+            const m = Math.hypot(dx, dy) || 1;
+            const tx = dx / m;
+            const ty = dy / m;
+            tang[i] = {
+              x: tx * cr - ty * sr,
+              y: tx * sr + ty * cr,
+            };
+            inPts[i] = {
+              x: pts[i].x - tang[i].x * orbR,
+              y: pts[i].y - tang[i].y * orbR,
+            };
+            outPts[i] = {
+              x: pts[i].x + tang[i].x * orbR,
+              y: pts[i].y + tang[i].y * orbR,
+            };
+          }
+          ctx.save();
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          ctx.setLineDash([]);
+          ctx.lineWidth = 0.48;
+          ctx.strokeStyle = "rgba(0, 225, 255, 0.22)";
+          if (state.pathThroughPoints) {
+            ctx.beginPath();
+            ctx.moveTo(inPts[0].x, inPts[0].y);
+            for (let i = 0; i < n; i++) {
+              ctx.lineTo(pts[i].x, pts[i].y);
+              ctx.lineTo(outPts[i].x, outPts[i].y);
+              if (i < n - 1) {
+                if (state.pathFilletMul <= 0) {
+                  ctx.lineTo(inPts[i + 1].x, inPts[i + 1].y);
+                } else {
+                  const dx = inPts[i + 1].x - outPts[i].x;
+                  const dy = inPts[i + 1].y - outPts[i].y;
+                  const d = Math.hypot(dx, dy);
+                  const nx = d > 1e-6 ? -dy / d : 0;
+                  const ny = d > 1e-6 ? dx / d : 0;
+                  const kx =
+                    (outPts[i].x + inPts[i + 1].x) * 0.5 +
+                    nx * d * 0.03 * state.pathFilletMul;
+                  const ky =
+                    (outPts[i].y + inPts[i + 1].y) * 0.5 +
+                    ny * d * 0.03 * state.pathFilletMul;
+                  ctx.quadraticCurveTo(kx, ky, inPts[i + 1].x, inPts[i + 1].y);
+                }
+              }
+            }
+            ctx.stroke();
+          } else {
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 0; i < n - 1; i++) {
+              const P = pts[i];
+              const Q = pts[i + 1];
+              const segLen = Math.hypot(Q.x - P.x, Q.y - P.y);
+              const h = segLen * 0.18 * state.pathHandleMul;
+              const cp1 = { x: P.x + tang[i].x * h, y: P.y + tang[i].y * h };
+              const cp2 = {
+                x: Q.x - tang[i + 1].x * h,
+                y: Q.y - tang[i + 1].y * h,
+              };
+              ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, Q.x, Q.y);
+            }
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        function drawStaticVolumePoints(toCanvas, t) {
+          if (!state.showStaticVolumePoints) return;
+          ctx.save();
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          for (let i = 0; i < STATIC_POINT_UV.length; i++) {
+            const c = toCanvas(project(staticAnchorPoint3(i), t));
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 3.4, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255, 130, 70, 0.92)";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(0, 210, 255, 0.55)";
+            ctx.lineWidth = 1.1;
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        function drawVertexMarkers(toCanvas, t) {
+          const n = markerFlat.length;
+          if (n === 0) return;
+          const sel = state.selectedMarkerFlat;
+          const rBase = 2.1 * state.markerSizeMul;
+          const rSel = 2.65 * state.markerSizeMul;
+          const rRing = 5.2 * state.markerSizeMul;
+          for (let k = 0; k < n; k++) {
+            const flat = markerFlat[k];
+            const c = markerScreenPos(flat, toCanvas, t);
+            const isSel = sel !== null && flat === sel;
+            if (isSel) {
+              ctx.beginPath();
+              ctx.arc(c.x, c.y, rRing, 0, Math.PI * 2);
+              ctx.strokeStyle = "rgba(0, 210, 255, 0.88)";
+              ctx.lineWidth = Math.max(1.2, 1.6 * state.markerSizeMul * 0.7);
+              ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, isSel ? rSel : rBase, 0, Math.PI * 2);
+            ctx.fillStyle = isSel ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.95)";
+            ctx.fill();
+          }
+        }
+
+        /** Integer-aligned grid: 12 × 5 × 5 cells in [-HALF, +HALF] per axis. */
+        function drawVolumeGrid(toCanvas, t) {
+          const xCoords = [];
+          for (let i = 0; i <= TILE_X; i++) xCoords.push(-HALF_X + i);
+          const yCoords = [];
+          for (let j = 0; j <= TILE_Y; j++) yCoords.push(-HALF_Y + j);
+          const zCoords = [];
+          for (let k = 0; k <= TILE_Z; k++) zCoords.push(-HALF_Z + k);
+
+          ctx.beginPath();
+
+          for (let yi = 0; yi < yCoords.length; yi++) {
+            for (let zi = 0; zi < zCoords.length; zi++) {
+              const y = yCoords[yi];
+              const z = zCoords[zi];
+              const p0 = toCanvas(project({ x: -HALF_X, y, z }, t));
+              const p1 = toCanvas(project({ x: HALF_X, y, z }, t));
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+            }
+          }
+
+          for (let xi = 0; xi < xCoords.length; xi++) {
+            for (let zi = 0; zi < zCoords.length; zi++) {
+              const x = xCoords[xi];
+              const z = zCoords[zi];
+              const p0 = toCanvas(project({ x, y: -HALF_Y, z }, t));
+              const p1 = toCanvas(project({ x, y: HALF_Y, z }, t));
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+            }
+          }
+
+          for (let xi = 0; xi < xCoords.length; xi++) {
+            for (let yi = 0; yi < yCoords.length; yi++) {
+              const x = xCoords[xi];
+              const y = yCoords[yi];
+              const p0 = toCanvas(project({ x, y, z: -HALF_Z }, t));
+              const p1 = toCanvas(project({ x, y, z: HALF_Z }, t));
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+            }
+          }
+
+          ctx.stroke();
+        }
+
+        /** Smooth panel point inset from mesh shell — follows slide when active. */
+        function panelSurfacePoint(u, v) {
+          const p = ellipsoidSurfacePoint(u, v);
+          const s = 1 - PANEL_INSET_FRAC;
+          return { x: p.x * s, y: p.y * s, z: p.z * s };
+        }
+
+        /**
+         * Volleyball / soccer-inspired seams: curved meridional strips + parabolic latitude-like bands.
+         * All curves live on (u,v) then map onto the ellipsoid.
+         */
+        /** 0 = viewport center, ~1 toward edges — stroke weight bias for panel links. */
+        function screenCenterBias01Panel(px, py, cw, ch) {
+          const cx = cw * 0.5;
+          const cy = ch * 0.5;
+          const scale = Math.max(cw, ch) * 0.52;
+          const nx = (px - cx) / scale;
+          const ny = (py - cy) / scale;
+          return Math.min(1, Math.hypot(nx, ny));
+        }
+
+        function drawBallPanels(toCanvas, tr, cw, ch) {
+          const STEPS = 56;
+          const PI = Math.PI;
+          const TAU = 2 * PI;
+          const nSeam = panelSeamCountFromTightness();
+          const ns = Math.max(1, nSeam);
+          const jitter = Math.max(0, Math.min(1, state.panelWrapJitter / 100));
+          const uniformBias = state.panelUniformWrap ? 0.34 : 1;
+          const jm = jitter * uniformBias;
+          const panelCurves = [];
+
+          function strokeCurve(getUV) {
+            let first = true;
+            for (let s = 0; s <= STEPS; s++) {
+              const t = s / STEPS;
+              const uv = getUV(t);
+              const c = toCanvas(project(panelSurfacePoint(uv.u, uv.v), tr));
+              if (first) {
+                ctx.moveTo(c.x, c.y);
+                first = false;
+              } else {
+                ctx.lineTo(c.x, c.y);
+              }
+            }
+          }
+
+          function markPanelCurve(getUV) {
+            const divs = panelDotDivisionsFromDensity();
+            if (divs <= 1) return;
+            const r = Math.max(0.42, 1.28 - divs / 700);
+            for (let m = 1; m < divs; m++) {
+              const tt = m / divs;
+              const uv = getUV(tt);
+              const c = toCanvas(project(panelSurfacePoint(uv.u, uv.v), tr));
+              ctx.beginPath();
+              ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+
+          /* Longitudinal seams (volleyball-style strips), parabolic / wavy in v */
+          for (let k = 0; k < nSeam; k++) {
+            const vBase = k * (TAU / nSeam);
+            const ha = hashPanel(k, 41);
+            const hb = hashPanel(k, 43);
+            const hd = hashPanel(k, 53);
+            panelCurves.push(function (t) {
+              const u = PI * (2 * t - t * t);
+              const par =
+                (hd - 0.5) * 0.55 * jm * (t - 0.5) * (t - 0.5) * 4;
+              const v =
+                vBase +
+                0.34 * Math.sin(PI * t) +
+                (ha - 0.5) * 0.4 * jm * Math.sin(3 * PI * t) +
+                (hb - 0.5) * 0.24 * jm * Math.sin(5 * PI * t) +
+                par;
+              return { u: u, v: wrapV(v) };
+            });
+          }
+
+          /* Transverse bands: u(v) with parabolic + harmonic variation (soccer-like arcs) */
+          for (let k = 0; k < nSeam; k++) {
+            const uMid =
+              (PI / (nSeam + 1)) * (k + 1) + (hashPanel(k, 61) - 0.5) * 0.09 * jm;
+            const ha = hashPanel(k, 67);
+            const hb = hashPanel(k, 71);
+            const hp = hashPanel(k, 73);
+            panelCurves.push(function (t) {
+              const v = TAU * t;
+              const vm = (v - PI) / PI;
+              const u =
+                uMid +
+                (ha - 0.5) * 0.4 * jm * Math.sin(2 * v) +
+                (hb - 0.5) * 0.2 * jm * Math.cos(3 * v) +
+                (hp - 0.5) * 0.38 * jm * vm * vm;
+              return {
+                u: Math.max(U_EPS, Math.min(PI - U_EPS, u)),
+                v: wrapV(v),
+              };
+            });
+          }
+
+          /* Diagonal “panel” cuts: quadratic blend in (u,v) for varied parabolic legs */
+          for (let k = 0; k < nSeam; k++) {
+            const g = hashPanel(k, 79);
+            const h0 = hashPanel(k, 83);
+            const h1 = hashPanel(k, 89);
+            const u0 = 0.12 * PI + (k / ns) * 0.35 * PI;
+            const u2 = PI - 0.1 * PI - (k / (ns + 2)) * 0.25 * PI;
+            const v0 = k * (TAU / nSeam) + (g - 0.5) * 0.8 * jm;
+            const v2 = wrapV(v0 + TAU / 3 + (h0 - 0.5) * 0.5 * jm);
+            const u1 = (u0 + u2) * 0.5 + (h1 - 0.5) * 0.45 * PI * jm;
+            const v1 = wrapV((v0 + v2) * 0.5 + (hashPanel(k, 97) - 0.5) * 0.9 * jm);
+            panelCurves.push(function (t) {
+              const omt = 1 - t;
+              const u = omt * omt * u0 + 2 * omt * t * u1 + t * t * u2;
+              let vv = omt * omt * v0 + 2 * omt * t * v1 + t * t * v2;
+              vv = wrapV(vv);
+              return {
+                u: Math.max(U_EPS, Math.min(PI - U_EPS, u)),
+                v: vv,
+              };
+            });
+          }
+
+          if (state.showPanelSeams) {
+            const dashPct = Math.max(0, Math.min(100, state.panelLineDash | 0));
+            ctx.beginPath();
+            ctx.lineWidth = 1.08;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            ctx.strokeStyle = "rgba(240, 248, 255, 0.38)";
+            if (dashPct <= 0) {
+              ctx.setLineDash([]);
+            } else {
+              const d = 0.75 + (dashPct / 100) * 9.25;
+              ctx.setLineDash([d, d * 1.06]);
+            }
+            for (let i = 0; i < panelCurves.length; i++) {
+              strokeCurve(panelCurves[i]);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
+          if (state.showPanelDots) {
+            const divsRay = panelDotDivisionsFromDensity();
+            if (divsRay > 1) {
+              const seamS = state.panelSeamSeed | 0;
+              const curl = 0.48;
+              const skip = Math.max(0, Math.min(12, state.panelLinkSkip | 0));
+              const nodes = [];
+              for (let ci = 0; ci < panelCurves.length; ci++) {
+                const getUV = panelCurves[ci];
+                for (let m = 1; m < divsRay; m++) {
+                  const tt = m / divsRay;
+                  const uv = getUV(tt);
+                  const P3 = panelSurfacePoint(uv.u, uv.v);
+                  const E3 = {
+                    x: P3.x * 0.9,
+                    y: P3.y * 0.9,
+                    z: P3.z * 0.9,
+                  };
+                  const s = toCanvas(project(P3, tr));
+                  const e = toCanvas(project(E3, tr));
+                  nodes.push({
+                    id: ci * 1000000 + m,
+                    ci: ci,
+                    m: m,
+                    sx: s.x,
+                    sy: s.y,
+                    ex: e.x,
+                    ey: e.y,
+                    isMarker: false,
+                  });
+                }
+              }
+              const panelNodeCount = nodes.length;
+
+              function linkXY(n) {
+                return { x: n.ex, y: n.ey };
+              }
+
+              const staticScreen = [];
+              for (let sk = 0; sk < STATIC_POINT_UV.length; sk++) {
+                staticScreen.push(
+                  toCanvas(project(staticAnchorPoint3(sk), tr)),
+                );
+              }
+
+              ctx.save();
+              ctx.lineCap = "round";
+              ctx.lineJoin = "round";
+              ctx.setLineDash([]);
+              ctx.strokeStyle = "rgba(160, 210, 255, 0.42)";
+              ctx.lineWidth = 0.5;
+              for (let i = 0; i < panelNodeCount; i++) {
+                const n = nodes[i];
+                ctx.beginPath();
+                ctx.moveTo(n.sx, n.sy);
+                ctx.lineTo(n.ex, n.ey);
+                ctx.stroke();
+              }
+
+              for (let i = 0; i < panelNodeCount; i++) {
+                const na = nodes[i];
+                const pA = linkXY(na);
+                let sk = 0;
+                let bestSd = Infinity;
+                for (let k = 0; k < staticScreen.length; k++) {
+                  const sx = staticScreen[k].x;
+                  const sy = staticScreen[k].y;
+                  const dx = pA.x - sx;
+                  const dy = pA.y - sy;
+                  const d = dx * dx + dy * dy;
+                  if (d < bestSd) {
+                    bestSd = d;
+                    sk = k;
+                  }
+                }
+                const S = staticScreen[sk];
+
+                let bestJ = -1;
+                let bestD = Infinity;
+                for (let j = 0; j < panelNodeCount; j++) {
+                  if (j === i) continue;
+                  const nb = nodes[j];
+                  if (
+                    !panelLinkAllowedSameSeam(na.ci, na.m, nb.ci, nb.m, skip)
+                  ) {
+                    continue;
+                  }
+                  const pB = linkXY(nb);
+                  const dx = pA.x - pB.x;
+                  const dy = pA.y - pB.y;
+                  const d = dx * dx + dy * dy;
+                  if (d < bestD) {
+                    bestD = d;
+                    bestJ = j;
+                  }
+                }
+
+                const nd1 = screenCenterBias01Panel(
+                  (pA.x + S.x) * 0.5,
+                  (pA.y + S.y) * 0.5,
+                  cw,
+                  ch,
+                );
+                const baseA1 = 0.2 + 0.18 * (1 - nd1);
+                ctx.strokeStyle = "rgba(210, 240, 255, " + baseA1 + ")";
+                ctx.lineWidth = 0.32 + 0.2 * (1 - nd1);
+                const rex = na.ex - na.sx;
+                const rey = na.ey - na.sy;
+                const rayLen = Math.hypot(rex, rey);
+                let vrx = 1;
+                let vry = 0;
+                if (rayLen > 1e-6) {
+                  vrx = rex / rayLen;
+                  vry = rey / rayLen;
+                }
+                const chordAS = Math.hypot(pA.x - S.x, pA.y - S.y);
+                const stub1 = Math.min(
+                  0.14 * chordAS,
+                  0.28 * rayLen,
+                  40,
+                );
+                const j1x = pA.x + vrx * stub1;
+                const j1y = pA.y + vry * stub1;
+                if (stub1 > 1.2) {
+                  ctx.beginPath();
+                  ctx.moveTo(pA.x, pA.y);
+                  ctx.lineTo(j1x, j1y);
+                  ctx.stroke();
+                }
+                strokeConnectionWideBezierTangentStart(
+                  j1x,
+                  j1y,
+                  S.x,
+                  S.y,
+                  vrx,
+                  vry,
+                  curl * 0.85,
+                  na.id,
+                  sk + 910000,
+                  seamS,
+                  0.22,
+                );
+
+                if (bestJ < 0 || bestD < 1e-8) continue;
+                const b = nodes[bestJ];
+                if (na.id >= b.id) continue;
+                const pB = linkXY(b);
+                const nd2 = screenCenterBias01Panel(
+                  (S.x + pB.x) * 0.5,
+                  (S.y + pB.y) * 0.5,
+                  cw,
+                  ch,
+                );
+                const baseA2 = 0.2 + 0.18 * (1 - nd2);
+                ctx.strokeStyle = "rgba(210, 240, 255, " + baseA2 + ")";
+                ctx.lineWidth = 0.32 + 0.2 * (1 - nd2);
+                const sdx = pB.x - S.x;
+                const sdy = pB.y - S.y;
+                const sdl = Math.hypot(sdx, sdy);
+                let vtx = 1;
+                let vty = 0;
+                if (sdl > 1e-6) {
+                  vtx = sdx / sdl;
+                  vty = sdy / sdl;
+                }
+                const chordSB = sdl;
+                const stub2 = Math.min(0.1 * chordSB, 36);
+                const j2x = S.x + vtx * stub2;
+                const j2y = S.y + vty * stub2;
+                if (stub2 > 1.2) {
+                  ctx.beginPath();
+                  ctx.moveTo(S.x, S.y);
+                  ctx.lineTo(j2x, j2y);
+                  ctx.stroke();
+                }
+                strokeConnectionWideBezierTangentStart(
+                  j2x,
+                  j2y,
+                  pB.x,
+                  pB.y,
+                  vtx,
+                  vty,
+                  curl * 0.85,
+                  sk + 920000,
+                  b.id,
+                  seamS + 3,
+                  0.2,
+                );
+              }
+              ctx.restore();
+            }
+            ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
+            for (let i = 0; i < panelCurves.length; i++) {
+              markPanelCurve(panelCurves[i]);
+            }
+          }
+
+          ctx.lineWidth = 1;
+        }
+
+        function canvasCssSize() {
+          const cw = canvas.clientWidth;
+          const ch = canvas.clientHeight;
+          return { cw: cw > 0 ? cw : 1, ch: ch > 0 ? ch : 1 };
+        }
+
+        function frame() {
+          const { cw, ch } = canvasCssSize();
+          ctx.clearRect(0, 0, cw, ch);
+
+          const t = trig();
+          const b = boundsScene(t);
+          const toCanvas = makeToCanvas(cw, ch, b);
+
+          ctx.lineWidth = 1;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+
+          if (state.showSolidGeometry) {
+            if (state.showVolume) {
+              ctx.strokeStyle = "rgba(0, 210, 255, 0.22)";
+              drawVolumeGrid(toCanvas, t);
+            } else {
+              drawEllipsoidSolidGeometry(toCanvas, t);
+            }
+          }
+
+          if (state.showPanelSeams || state.showPanelDots) {
+            drawBallPanels(toCanvas, t, cw, ch);
+          }
+
+          if (state.showMesh) {
+            drawEllipsoidWireframe(toCanvas, t);
+          }
+
+          if (state.showPaths) {
+            drawTrustZoneCore(toCanvas, t);
+            drawFixedPaths(toCanvas, t);
+          }
+
+          if (state.showStaticVolumePoints) {
+            drawStaticVolumePoints(toCanvas, t);
+          }
+
+          if (state.showMarkers && markerFlat.length > 0) {
+            drawVertexMarkers(toCanvas, t);
+          }
+        }
+
+        function resize() {
+          const { cw, ch } = canvasCssSize();
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const w = Math.max(1, Math.floor(cw * dpr));
+          const h = Math.max(1, Math.floor(ch * dpr));
+          canvas.width = w;
+          canvas.height = h;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          frame();
+        }
+
+        function onPointerDown(e) {
+          closeAllPopovers();
+          if (e.button !== 0) return;
+          const ttr = trig();
+          const b = boundsScene(ttr);
+          const { cw, ch } = canvasCssSize();
+          const toCanvas = makeToCanvas(cw, ch, b);
+          const hitFlat =
+            state.showMarkers && markerFlat.length > 0
+              ? pickMarkerAtCanvas(e.clientX, e.clientY, toCanvas, ttr)
+              : null;
+          if (hitFlat != null) {
+            state.selectedMarkerFlat = hitFlat;
+            const chains =
+              markerFlat.length >= 4 ? buildMarkerChainsProximity(ttr) : [];
+            state.selectedChainIndex = findChainIndexForFlat(hitFlat, chains);
+            frame();
+            return;
+          }
+          state.selectedMarkerFlat = null;
+          state.selectedChainIndex = null;
+          state.dragging = true;
+          state.ptrId = e.pointerId;
+          state.lastX = e.clientX;
+          state.lastY = e.clientY;
+          canvas.classList.add("is-dragging");
+          canvas.setPointerCapture(e.pointerId);
+        }
+
+        function onPointerMove(e) {
+          if (!state.dragging || e.pointerId !== state.ptrId) return;
+          const dx = e.clientX - state.lastX;
+          const dy = e.clientY - state.lastY;
+          state.lastX = e.clientX;
+          state.lastY = e.clientY;
+          state.yaw += dx * ROT_SENS;
+          state.pitch += dy * ROT_SENS;
+          if (state.pitch < PITCH_MIN) state.pitch = PITCH_MIN;
+          if (state.pitch > PITCH_MAX) state.pitch = PITCH_MAX;
+          frame();
+        }
+
+        function onPointerUp(e) {
+          if (e.pointerId !== state.ptrId) return;
+          state.dragging = false;
+          state.ptrId = null;
+          canvas.classList.remove("is-dragging");
+          try {
+            canvas.releasePointerCapture(e.pointerId);
+          } catch (_) {}
+        }
+
+        function onWheel(e) {
+          e.preventDefault();
+          let z = state.zoom * Math.exp(-e.deltaY * ZOOM_SENS);
+          if (z < ZOOM_MIN) z = ZOOM_MIN;
+          if (z > ZOOM_MAX) z = ZOOM_MAX;
+          state.zoom = z;
+          frame();
+        }
+
+        function updateVolumeButtonLabel() {
+          btnVolume.textContent = state.showVolume ? "Solid: 12×5×5" : "Solid: Ellipsoid";
+          btnVolume.title = state.showVolume
+            ? "Solid mode is 12×5×5 volume"
+            : "Solid mode is ellipsoid";
+        }
+
+        function syncVolumeControlsFromState() {
+          solidModeVolume.checked = state.showVolume;
+          solidModeEllipsoid.checked = !state.showVolume;
+          chkSolidGeometry.checked = state.showSolidGeometry;
+          updateVolumeButtonLabel();
+        }
+
+        function closeAllPopovers() {
+          state.openPopover = null;
+          syncPopoverChrome();
+        }
+
+        function togglePopover(key) {
+          state.openPopover = state.openPopover === key ? null : key;
+          syncPopoverChrome();
+        }
+
+        function syncPopoverChrome() {
+          const open = state.openPopover;
+          toolAxisSlide.classList.toggle("chrome-tool--open", open === "axis-slide");
+          btnAxisSlide.setAttribute("aria-expanded", open === "axis-slide" ? "true" : "false");
+          toolPanels.classList.toggle("chrome-tool--open", open === "panels");
+          btnPanels.setAttribute("aria-expanded", open === "panels" ? "true" : "false");
+          toolVolume.classList.toggle("chrome-tool--open", open === "volume");
+          btnVolume.setAttribute("aria-expanded", open === "volume" ? "true" : "false");
+          toolMesh.classList.toggle("chrome-tool--open", open === "mesh");
+          btnMesh.setAttribute("aria-expanded", open === "mesh" ? "true" : "false");
+          toolMarkers.classList.toggle("chrome-tool--open", open === "markers");
+          btnMarkers.setAttribute("aria-expanded", open === "markers" ? "true" : "false");
+          toolPaths.classList.toggle("chrome-tool--open", open === "paths");
+          btnPaths.setAttribute("aria-expanded", open === "paths" ? "true" : "false");
+        }
+
+        function syncChromePressedButtons() {
+          const anyPanel = state.showPanelSeams || state.showPanelDots;
+          btnPanels.classList.toggle("is-active", anyPanel);
+          btnPanels.setAttribute("aria-pressed", anyPanel ? "true" : "false");
+          btnMesh.classList.toggle("is-active", state.showMesh);
+          btnMesh.setAttribute("aria-pressed", state.showMesh ? "true" : "false");
+          btnMarkers.classList.toggle("is-active", state.showMarkers);
+          btnMarkers.setAttribute("aria-pressed", state.showMarkers ? "true" : "false");
+          btnPaths.classList.toggle("is-active", state.showPaths);
+          btnPaths.setAttribute("aria-pressed", state.showPaths ? "true" : "false");
+          btnVolume.classList.toggle("is-active", state.showSolidGeometry);
+          btnVolume.setAttribute("aria-pressed", state.showSolidGeometry ? "true" : "false");
+          btnAxisSlide.classList.toggle("is-active", state.axisSlideAnim);
+          btnAxisSlide.setAttribute("aria-pressed", state.axisSlideAnim ? "true" : "false");
+        }
+
+        function updatePanelControlsDisabled() {
+          const panelOn = state.showPanelSeams || state.showPanelDots;
+          chkPanelUniform.disabled = !panelOn;
+          panelWrapJitterInput.disabled = !panelOn;
+          panelTightnessInput.disabled = !panelOn;
+          panelLineDashInput.disabled = !state.showPanelSeams;
+          panelDotDensityInput.disabled = !state.showPanelDots;
+          panelSeamSeedInput.disabled = !panelOn;
+          panelLinkSkipInput.disabled = !state.showPanelDots;
+          btnPanelSeamReseed.disabled = !panelOn;
+        }
+
+        function updateMeshControlsDisabled() {
+          const m = state.showMesh;
+          meshOpacityInput.disabled = !m;
+          irregularSeedInput.disabled = !m;
+          irregularScaleInput.disabled = !m;
+        }
+
+        function updateMarkerControlsDisabled() {
+          markerCountInput.disabled = !state.showMarkers;
+          markerSizeInput.disabled = !state.showMarkers;
+          pathFilletInput.disabled = !state.showPaths;
+          pathHandleInput.disabled = !state.showPaths;
+          pathExtendInput.disabled = !state.showPaths;
+        }
+
+        function syncPanelTogglesFromState() {
+          chkPanelSeams.checked = state.showPanelSeams;
+          chkPanelDots.checked = state.showPanelDots;
+          chkPanelUniform.checked = state.panelUniformWrap;
+          updatePanelControlsDisabled();
+        }
+
+        btnVolume.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          togglePopover("volume");
+        });
+
+        btnAxisSlide.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          togglePopover("axis-slide");
+        });
+
+        btnPanels.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          togglePopover("panels");
+        });
+
+        btnMesh.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          togglePopover("mesh");
+        });
+
+        btnMarkers.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          togglePopover("markers");
+        });
+
+        btnPaths.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          togglePopover("paths");
+        });
+
+        chkAxisSlideAnim.addEventListener("change", function () {
+          setAxisSlideAnim(chkAxisSlideAnim.checked);
+        });
+
+        chkPanelSeams.addEventListener("change", function () {
+          state.showPanelSeams = chkPanelSeams.checked;
+          syncChromePressedButtons();
+          updatePanelControlsDisabled();
+          frame();
+        });
+
+        chkPanelDots.addEventListener("change", function () {
+          state.showPanelDots = chkPanelDots.checked;
+          syncChromePressedButtons();
+          updatePanelControlsDisabled();
+          frame();
+        });
+
+        chkPanelUniform.addEventListener("change", function () {
+          readPanelControlsFromInputs();
+          frame();
+        });
+
+        chkMeshShow.addEventListener("change", function () {
+          state.showMesh = chkMeshShow.checked;
+          syncChromePressedButtons();
+          updateMeshControlsDisabled();
+          frame();
+        });
+
+        chkMarkersShow.addEventListener("change", function () {
+          state.showMarkers = chkMarkersShow.checked;
+          syncChromePressedButtons();
+          updateMarkerControlsDisabled();
+          frame();
+        });
+
+        solidModeEllipsoid.addEventListener("change", function () {
+          if (!solidModeEllipsoid.checked) return;
+          state.showVolume = false;
+          syncVolumeControlsFromState();
+          frame();
+        });
+
+        solidModeVolume.addEventListener("change", function () {
+          if (!solidModeVolume.checked) return;
+          state.showVolume = true;
+          syncVolumeControlsFromState();
+          frame();
+        });
+
+        chkSolidGeometry.addEventListener("change", function () {
+          state.showSolidGeometry = chkSolidGeometry.checked;
+          syncChromePressedButtons();
+          syncVolumeControlsFromState();
+          frame();
+        });
+
+        chkPathsShow.addEventListener("change", function () {
+          state.showPaths = chkPathsShow.checked;
+          syncChromePressedButtons();
+          updateMarkerControlsDisabled();
+          frame();
+        });
+
+        chkStaticVolumePoints.addEventListener("change", function () {
+          state.showStaticVolumePoints = chkStaticVolumePoints.checked;
+          frame();
+        });
+
+        chkPathThrough.addEventListener("change", function () {
+          state.pathThroughPoints = chkPathThrough.checked;
+          frame();
+        });
+
+        function readPanelControlsFromInputs() {
+          state.panelTightness = Number(panelTightnessInput.value);
+          panelTightnessVal.textContent = String(state.panelTightness);
+          state.panelUniformWrap = chkPanelUniform.checked;
+          state.panelWrapJitter = Number(panelWrapJitterInput.value);
+          panelWrapJitterVal.textContent = Math.round(state.panelWrapJitter) + "%";
+          state.panelDotDensity = Number(panelDotDensityInput.value);
+          panelDotVal.textContent = String(state.panelDotDensity);
+          state.panelSeamSeed = Number(panelSeamSeedInput.value);
+          panelSeamSeedVal.textContent = String(state.panelSeamSeed);
+          state.panelLinkSkip = Number(panelLinkSkipInput.value);
+          panelLinkSkipVal.textContent = String(state.panelLinkSkip);
+          state.panelLineDash = Number(panelLineDashInput.value);
+          panelLineVal.textContent =
+            state.panelLineDash <= 0 ? "solid" : String(state.panelLineDash);
+        }
+
+        function reseedPanelSeams() {
+          state.panelSeamSeed = Math.floor(Math.random() * 2001);
+          panelSeamSeedInput.value = String(state.panelSeamSeed);
+          panelSeamSeedVal.textContent = String(state.panelSeamSeed);
+          frame();
+        }
+
+        function readMeshOpacityFromInput() {
+          const pct = Number(meshOpacityInput.value);
+          state.meshOpacity = Math.max(0.08, Math.min(1, pct / 100));
+          meshOpacityVal.textContent = Math.round(pct) + "%";
+        }
+
+        function readMarkerCountFromInput() {
+          state.markerCount = Number(markerCountInput.value);
+          markerCountVal.textContent = String(state.markerCount);
+          rebuildMarkers();
+        }
+
+        function readMarkerSizeFromInput() {
+          const pct = Number(markerSizeInput.value);
+          state.markerSizeMul = Math.max(0.5, Math.min(5, pct / 100));
+          markerSizeVal.textContent = state.markerSizeMul.toFixed(2) + "x";
+        }
+
+        function readPathfinderControlsFromInputs() {
+          const filletPct = Number(pathFilletInput.value);
+          state.pathFilletMul = Math.max(0, Math.min(5, filletPct / 100));
+          pathFilletVal.textContent = state.pathFilletMul.toFixed(2) + "x";
+          const handlePct = Number(pathHandleInput.value);
+          state.pathHandleMul = Math.max(0, Math.min(2.6, handlePct / 100));
+          pathHandleVal.textContent = state.pathHandleMul.toFixed(2) + "x";
+          const rotDeg = Number(pathExtendInput.value);
+          state.pathExtendMul = Math.max(0, Math.min(360, rotDeg));
+          pathExtendVal.textContent = Math.round(state.pathExtendMul) + "°";
+        }
+
+        panelTightnessInput.addEventListener("input", function () {
+          readPanelControlsFromInputs();
+          frame();
+        });
+
+        panelWrapJitterInput.addEventListener("input", function () {
+          readPanelControlsFromInputs();
+          frame();
+        });
+
+        panelDotDensityInput.addEventListener("input", function () {
+          readPanelControlsFromInputs();
+          frame();
+        });
+
+        panelSeamSeedInput.addEventListener("input", function () {
+          readPanelControlsFromInputs();
+          frame();
+        });
+
+        panelLinkSkipInput.addEventListener("input", function () {
+          readPanelControlsFromInputs();
+          frame();
+        });
+
+        btnPanelSeamReseed.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          reseedPanelSeams();
+        });
+
+        panelLineDashInput.addEventListener("input", function () {
+          readPanelControlsFromInputs();
+          frame();
+        });
+
+        meshOpacityInput.addEventListener("input", function () {
+          readMeshOpacityFromInput();
+          frame();
+        });
+
+        markerCountInput.addEventListener("input", function () {
+          readMarkerCountFromInput();
+          frame();
+        });
+        markerSizeInput.addEventListener("input", function () {
+          readMarkerSizeFromInput();
+          frame();
+        });
+        pathFilletInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        pathHandleInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        pathExtendInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+
+        btnReset.addEventListener("click", function () {
+          closeAllPopovers();
+          state.yaw = VIEW_FRONT_YAW;
+          state.pitch = VIEW_FRONT_PITCH;
+          state.zoom = 1;
+          frame();
+        });
+
+        function axisTick(ts) {
+          if (!state.axisSlideAnim) {
+            axisRaf = null;
+            return;
+          }
+          if (axisLastTs <= 0) {
+            axisLastTs = ts;
+          } else {
+            const dt = (ts - axisLastTs) * 0.001;
+            axisLastTs = ts;
+            state.axisPhase += dt * AXIS_SPEED * (state.axisSlideSpeedPct / 100);
+          }
+          frame();
+          axisRaf = requestAnimationFrame(axisTick);
+        }
+
+        function setAxisSlideAnim(on) {
+          state.axisSlideAnim = on;
+          chkAxisSlideAnim.checked = on;
+          syncChromePressedButtons();
+          if (on) {
+            axisLastTs = 0;
+            if (axisRaf != null) cancelAnimationFrame(axisRaf);
+            axisRaf = requestAnimationFrame(axisTick);
+          } else {
+            if (axisRaf != null) {
+              cancelAnimationFrame(axisRaf);
+              axisRaf = null;
+            }
+            frame();
+          }
+        }
+
+        function readSlideControlsFromInputs() {
+          state.slideAngleDeg = Number(slideAngleInput.value);
+          state.axisSlideSpeedPct = Number(slideAnimSpeedInput.value);
+          state.slideOffsetVDeg = Number(slideOffVInput.value);
+          state.slideOffsetUDeg = Number(slideOffUInput.value);
+          slideAngleVal.textContent = state.slideAngleDeg + "°";
+          slideAnimSpeedVal.textContent = state.axisSlideSpeedPct + "%";
+          slideOffVVal.textContent = state.slideOffsetVDeg + "°";
+          slideOffUVal.textContent = state.slideOffsetUDeg + "°";
+        }
+
+        function onSlideControlInput() {
+          readSlideControlsFromInputs();
+          frame();
+        }
+
+        function readIrregularControlsFromInputs() {
+          state.irregularSeed = Number(irregularSeedInput.value);
+          state.irregularScale = Number(irregularScaleInput.value) / 100;
+          irregularSeedVal.textContent = String(state.irregularSeed);
+          irregularScaleVal.textContent = Math.round(Number(irregularScaleInput.value)) + "%";
+        }
+
+        function onIrregularControlInput() {
+          readIrregularControlsFromInputs();
+          frame();
+        }
+
+        slideAngleInput.addEventListener("input", onSlideControlInput);
+        slideAnimSpeedInput.addEventListener("input", onSlideControlInput);
+        slideOffVInput.addEventListener("input", onSlideControlInput);
+        slideOffUInput.addEventListener("input", onSlideControlInput);
+        readSlideControlsFromInputs();
+
+        irregularSeedInput.addEventListener("input", onIrregularControlInput);
+        irregularScaleInput.addEventListener("input", onIrregularControlInput);
+        readIrregularControlsFromInputs();
+
+        readPanelControlsFromInputs();
+        readMeshOpacityFromInput();
+        readMarkerCountFromInput();
+        readMarkerSizeFromInput();
+        readPathfinderControlsFromInputs();
+        chkPathThrough.checked = state.pathThroughPoints;
+        syncVolumeControlsFromState();
+        chkPathsShow.checked = state.showPaths;
+        chkStaticVolumePoints.checked = state.showStaticVolumePoints;
+        chkAxisSlideAnim.checked = state.axisSlideAnim;
+        chkMeshShow.checked = state.showMesh;
+        chkMarkersShow.checked = state.showMarkers;
+        syncPanelTogglesFromState();
+        updateMeshControlsDisabled();
+        updateMarkerControlsDisabled();
+        syncChromePressedButtons();
+        syncPopoverChrome();
+
+        window.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            closeAllPopovers();
+          }
+        });
+
+        canvas.addEventListener("pointerdown", onPointerDown);
+        canvas.addEventListener("pointermove", onPointerMove);
+        canvas.addEventListener("pointerup", onPointerUp);
+        canvas.addEventListener("pointercancel", onPointerUp);
+        canvas.addEventListener("lostpointercapture", onPointerUp);
+        canvas.addEventListener("wheel", onWheel, { passive: false });
+
+        resize();
+        requestAnimationFrame(resize);
+        window.addEventListener("resize", resize);
+        if (typeof ResizeObserver !== "undefined") {
+          new ResizeObserver(resize).observe(viewport);
+        }
+      })();
+    </script>
+    <script src="embed-bridge.js"></script>
+  </body>
+</html>

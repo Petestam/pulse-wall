@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Strand field · generative</title>
+    <title>Strand field · generative (floating field)</title>
     <style>
       * {
         box-sizing: border-box;
@@ -99,18 +99,23 @@
     </style>
   </head>
   <body>
-    <canvas id="viz" aria-label="Generative strand visualization"></canvas>
+    <canvas id="viz" aria-label="Generative strand visualization with floating blue field"></canvas>
     <div class="chrome">
       <button type="button" id="btn-spin" class="is-active">Spin</button>
       <button type="button" id="btn-labels">Labels</button>
       <button type="button" id="btn-sync">Sync pipe</button>
       <button type="button" id="btn-regen">Regenerate</button>
       <a href="index.html">Topology editor</a>
+      <a href="generative.html">Classic generative</a>
     </div>
     <div class="scenario-strip" id="scenario-strip">
       <div class="scenario-strip__title">12 scenarios</div>
       <div class="scenario-strip__buttons" id="scenario-buttons"></div>
     </div>
+    <script>
+      window.__GENERATIVE_FIELD__ = true;
+    </script>
+    <script src="generative-field-bg.js"></script>
     <script src="shared-modal-registry.js"></script>
     <script src="generative.js"></script>
   </body>

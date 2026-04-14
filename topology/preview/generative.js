@@ -7,12 +7,23 @@
   const canvas = document.getElementById("viz");
   const ctx = canvas.getContext("2d", { alpha: false });
 
+  /** When true (generative-field.html), use floating blue field + warped grid; particles replace curtain strands. */
+  const IS_FIELD =
+    typeof window !== "undefined" && window.__GENERATIVE_FIELD__;
+  /** Contact sheet / embedded iframe: hide local chrome; control from parent via postMessage + shared flow tune storage. */
+  const IS_EMBED =
+    typeof location !== "undefined" &&
+    new URLSearchParams(location.search).get("embed") === "1";
+
+  /** Set by initFlowTuneUi; used when flow tune is updated from another frame (contact sheet). */
+  let flowTuneSyncUi = () => {};
+
   /* ═══════════════════════════════════════════════════════
    * SPEC-DERIVED CONSTANTS  (Pulse Wall Visual System V3)
    * ═══════════════════════════════════════════════════════ */
-  const BG            = [6, 74, 164];      // Cisco-blue field anchor
-  const BG_DEEP       = [8, 56, 132];
-  const BG_MID        = [18, 112, 212];
+  const BG            = [6, 42, 108];      // Cisco-midnight field anchor
+  const BG_DEEP       = [3, 16, 52];
+  const BG_MID        = [14, 84, 188];
   const STRAND_NEUTRAL = [220, 230, 244];  // light strands over blue field
   const NODE_FILL     = [236, 244, 255];   // near-white node dots
 
@@ -50,7 +61,7 @@
     crossRingArcScale:  1.0,
     grad: { fadeIn: 0.30, peak: 0.60, fadeOut: 0.80, end: 0.92 },
     stagger:     0.06,
-    neutralAlpha: { solid: 0.56, dashed: 0.44, dotted: 0.30 },
+    neutralAlpha: { solid: 0.70, dashed: 0.56, dotted: 0.40 },
     strandBase:   { solid: 3.0,  dashed: 1.8,  dotted: 1.0  },
     dash:         { dashed: [6, 4], dotted: [2, 4] },
     grainAlpha:  0.07,
@@ -68,6 +79,14 @@
     arcInconsistency: 0.52,
     strandSpread:     1.35,
     strandInstances:  1.45,
+    /** Floating-field view only: max parallel strokes per highway edge (1–8). */
+    fieldHighwayStrands: 8,
+    /** Tween depth dots (0–20): floor(qty/4) → 0–5 dots per gap; 0 = off. */
+    tweenQty: 4,
+    /** Max world jitter in px scales as tweenJitter/20. */
+    tweenJitter: 10,
+    /** Shifts tween positions along the ring segment (neutral = 10). */
+    tweenOffset: 10,
     orbSpeed:         7.0,
     orbGlowDistance:  6.0,
     bendFillet:       8.0,
@@ -218,7 +237,13 @@
     if (style === "dotted") base *= SPEC.telemetryStrandMul;
     const maxDeg = Math.max(degFrom || 0, degTo || 0);
     if (maxDeg > SPEC.hubThreshold) base *= SPEC.hubStrandMul;
-    return Math.max(1, Math.round(base * flowTune.strandInstances));
+    const instMul = IS_FIELD ? 1 : flowTune.strandInstances;
+    let n = Math.max(1, Math.round(base * instMul));
+    if (IS_FIELD) {
+      const cap = Math.round(clamp(Number(flowTune.fieldHighwayStrands) || 8, 1, 8));
+      n = Math.min(n, cap);
+    }
+    return n;
   }
 
   function ringOpacity(ringId) {
@@ -356,8 +381,14 @@
       if (typeof x.strandInstances === "number")  flowTune.strandInstances = clamp(x.strandInstances, 0, 20);
       if (typeof x.orbSpeed === "number")         flowTune.orbSpeed = clamp(x.orbSpeed, 0, 20);
       if (typeof x.orbGlowDistance === "number")  flowTune.orbGlowDistance = clamp(x.orbGlowDistance, 0, 20);
-      if (typeof x.bendFillet === "number")       flowTune.bendFillet = clamp(x.bendFillet, 0, 20);
-      if (typeof x.bendQuantity === "number")     flowTune.bendQuantity = clamp(x.bendQuantity, 1, 3);
+      if (typeof x.bendFillet === "number")       flowTune.bendFillet = clamp(x.bendFillet, 0, 40);
+      if (typeof x.bendQuantity === "number")     flowTune.bendQuantity = clamp(x.bendQuantity, 1, 8);
+      if (typeof x.fieldHighwayStrands === "number") {
+        flowTune.fieldHighwayStrands = clamp(Math.round(x.fieldHighwayStrands), 1, 8);
+      }
+      if (typeof x.tweenQty === "number")    flowTune.tweenQty = clamp(x.tweenQty, 0, 20);
+      if (typeof x.tweenJitter === "number") flowTune.tweenJitter = clamp(x.tweenJitter, 0, 20);
+      if (typeof x.tweenOffset === "number") flowTune.tweenOffset = clamp(x.tweenOffset, 0, 20);
       if (typeof x.yaw === "number")         scene3d.yaw = clamp(x.yaw, -Math.PI * 2, Math.PI * 2);
       if (typeof x.pitch === "number")       scene3d.pitch = clamp(x.pitch, -1.15, 1.15);
       if (typeof x.depth === "number")       scene3d.depth = clamp(x.depth, 0, 20);
@@ -373,6 +404,8 @@
           scene3d.spinSpeed = clamp(rawSpin, 0, SPIN_DIAL_MAX);
         }
       }
+      if (IS_FIELD) flowTune.strandInstances = 1;
+      if (typeof x.showNodeLabels === "boolean") showNodeLabels = x.showNodeLabels;
     } catch (_) { /* ignore */ }
   }
 
@@ -383,6 +416,7 @@
         yaw: scene3d.yaw, pitch: scene3d.pitch,
         depth: scene3d.depth, perspective: scene3d.perspective,
         autoSpin: scene3d.autoSpin, spinSpeed: scene3d.spinSpeed,
+        showNodeLabels,
       }));
     } catch (_) { /* ignore */ }
   }
@@ -464,6 +498,29 @@
     return points[points.length - 1];
   }
 
+  function pointAndTangentOnPolyline(points, t) {
+    const p = pointOnPolyline(points, t);
+    const p0 = pointOnPolyline(points, clamp01(t - 0.015));
+    const p1 = pointOnPolyline(points, clamp01(t + 0.015));
+    let tx = p1.x - p0.x;
+    let ty = p1.y - p0.y;
+    const tl = Math.hypot(tx, ty) || 1;
+    tx /= tl;
+    ty /= tl;
+    return { x: p.x, y: p.y, tx, ty };
+  }
+
+  function polylineLength(points) {
+    if (!Array.isArray(points) || points.length < 2) return 0;
+    let len = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i];
+      const b = points[i + 1];
+      len += Math.hypot(b.x - a.x, b.y - a.y);
+    }
+    return len;
+  }
+
   function traceFilletedPolyline(ctx2d, points, radius) {
     if (!Array.isArray(points) || points.length < 2) return;
     if (points.length === 2 || radius <= 0.01) {
@@ -479,6 +536,103 @@
     }
     const last = points[points.length - 1];
     ctx2d.lineTo(last.x, last.y);
+  }
+
+  /**
+   * Flatten the same geometry as traceFilletedPolyline (moveTo + arcTo + lineTo)
+   * so pointOnPolyline / length match the visible rounded path.
+   */
+  function appendLineSubdiv(a, b, out, pxStep) {
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    const n = Math.max(2, Math.ceil(d / Math.max(2, pxStep)));
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      out.push({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) });
+    }
+  }
+
+  function arcToFlattenSegment(A, B, C, r, arcSteps, linePxStep) {
+    const v1x = B.x - A.x;
+    const v1y = B.y - A.y;
+    const v2x = C.x - B.x;
+    const v2y = C.y - B.y;
+    const len1 = Math.hypot(v1x, v1y);
+    const len2 = Math.hypot(v2x, v2y);
+    const pts = [];
+    if (len1 < 1e-6 || len2 < 1e-6) {
+      appendLineSubdiv(A, B, pts, linePxStep);
+      return pts;
+    }
+    const u1x = v1x / len1;
+    const u1y = v1y / len1;
+    const u2x = v2x / len2;
+    const u2y = v2y / len2;
+    const dot = -u1x * u2x + -u1y * u2y;
+    const theta = Math.acos(clamp(dot, -1, 1));
+    if (theta < 1e-5 || Math.PI - theta < 1e-4) {
+      appendLineSubdiv(A, B, pts, linePxStep);
+      return pts;
+    }
+    const tanHalf = Math.tan(theta * 0.5);
+    if (!Number.isFinite(tanHalf) || Math.abs(tanHalf) < 1e-8) {
+      appendLineSubdiv(A, B, pts, linePxStep);
+      return pts;
+    }
+    let tseg = r / tanHalf;
+    const maxT = Math.min(len1, len2) * 0.998;
+    if (tseg > maxT) tseg = maxT;
+    const rEff = tseg * tanHalf;
+    const T1 = { x: B.x - u1x * tseg, y: B.y - u1y * tseg };
+    const T2 = { x: B.x + u2x * tseg, y: B.y + u2y * tseg };
+    const cross = u1x * u2y - u1y * u2x;
+    const n1x = -u1y * (cross >= 0 ? 1 : -1);
+    const n1y = u1x * (cross >= 0 ? 1 : -1);
+    const Ox = T1.x + n1x * rEff;
+    const Oy = T1.y + n1y * rEff;
+    const startAngle = Math.atan2(T1.y - Oy, T1.x - Ox);
+    const endAngle = Math.atan2(T2.y - Oy, T2.x - Ox);
+    let sweep = endAngle - startAngle;
+    if (cross >= 0) {
+      if (sweep < 0) sweep += 2 * Math.PI;
+    } else {
+      if (sweep > 0) sweep -= 2 * Math.PI;
+    }
+    appendLineSubdiv(A, T1, pts, linePxStep);
+    for (let i = 1; i <= arcSteps; i++) {
+      const ang = startAngle + sweep * (i / arcSteps);
+      pts.push({ x: Ox + rEff * Math.cos(ang), y: Oy + rEff * Math.sin(ang) });
+    }
+    return pts;
+  }
+
+  function flattenFilletedPolyline(points, radius, arcSteps, linePxStep) {
+    arcSteps = arcSteps == null ? 14 : arcSteps;
+    linePxStep = linePxStep == null ? 6 : linePxStep;
+    if (!Array.isArray(points) || points.length < 2) return points;
+    if (radius <= 0.01 || points.length === 2) {
+      const out = [{ x: points[0].x, y: points[0].y }];
+      for (let i = 0; i < points.length - 1; i++) {
+        appendLineSubdiv(points[i], points[i + 1], out, linePxStep);
+      }
+      return out;
+    }
+    const out = [{ x: points[0].x, y: points[0].y }];
+    let current = { x: points[0].x, y: points[0].y };
+    for (let i = 1; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const seg = arcToFlattenSegment(current, p1, p2, radius, arcSteps, linePxStep);
+      for (let j = 0; j < seg.length; j++) {
+        const p = seg[j];
+        const last = out[out.length - 1];
+        if (Math.hypot(p.x - last.x, p.y - last.y) < 1e-6) continue;
+        out.push({ x: p.x, y: p.y });
+      }
+      current = out[out.length - 1];
+    }
+    const last = points[points.length - 1];
+    appendLineSubdiv(current, last, out, linePxStep);
+    return out;
   }
 
   function buildHighwayPolyline(x1, y1, x2, y2, dx, dy, tangentFrac, bendQty) {
@@ -503,13 +657,28 @@
     }
     const yIn = y1 + dy * clamp(0.20 + tangentFrac * 0.20, 0.18, 0.32);
     const yOut = y2 - dy * clamp(0.20 + tangentFrac * 0.20, 0.18, 0.32);
-    return [
-      { x: x1, y: y1 },
-      { x: x1, y: yIn },
-      { x: midX, y: midY },
-      { x: x2, y: yOut },
-      { x: x2, y: y2 },
-    ];
+    if (bendQty <= 3) {
+      return [
+        { x: x1, y: y1 },
+        { x: x1, y: yIn },
+        { x: midX, y: midY },
+        { x: x2, y: yOut },
+        { x: x2, y: y2 },
+      ];
+    }
+    const pts = [{ x: x1, y: y1 }, { x: x1, y: yIn }];
+    const interiorCount = bendQty - 2;
+    for (let m = 1; m <= interiorCount; m++) {
+      const u = m / (interiorCount + 1);
+      const sway = Math.sin(u * Math.PI) * dx * 0.07;
+      const alt = (m % 2 ? 1 : -1) * dx * 0.03;
+      pts.push({
+        x: lerp(x1, x2, u) + sway + alt,
+        y: lerp(yIn, yOut, u),
+      });
+    }
+    pts.push({ x: x2, y: yOut }, { x: x2, y: y2 });
+    return pts;
   }
 
   function buildEdgeAdjacency(edges) {
@@ -627,54 +796,76 @@
   }
 
   function drawFieldBackground(w, h, nowMs) {
+    if (IS_FIELD && window.GenerativeFieldBg) {
+      const tSec = (nowMs || 0) * 0.001;
+      window.GenerativeFieldBg.ensureInit(w, h);
+      window.GenerativeFieldBg.drawBackground(ctx, w, h, tSec);
+      window.GenerativeFieldBg.drawDotGrid(ctx, w, h, tSec);
+      return;
+    }
     const t = (nowMs || 0) * 0.00011;
     const d = Math.min(w, h);
-    const driftX = Math.sin(t * 1.4) * 0.14 + Math.sin(t * 0.41) * 0.06;
-    const driftY = Math.cos(t * 1.1) * 0.10 + Math.sin(t * 0.53) * 0.05;
+    const driftX = Math.sin(t * 1.25) * 0.10 + Math.sin(t * 0.35) * 0.05;
+    const driftY = Math.cos(t * 0.95) * 0.08 + Math.sin(t * 0.49) * 0.04;
     const dayNight = 0.5 + 0.5 * Math.sin(t * 0.37 - 0.8);
     const midnightLift = smoothstep(0.0, 1.0, dayNight);
     const brightLift = 1 - midnightLift;
 
     const g = ctx.createLinearGradient(
-      -w * (0.06 + driftX), h * (1.03 - driftY),
-      w * (1.06 + driftX), -h * (0.03 + driftY)
+      -w * (0.04 + driftX), h * (1.02 - driftY),
+      w * (1.04 + driftX), -h * (0.02 + driftY)
     );
-    g.addColorStop(0.00, rgba(lerpColor(BG_DEEP, [2, 14, 44], midnightLift * 0.9), 1));
-    g.addColorStop(0.38, rgba(lerpColor(BG, BG_MID, brightLift * 0.75), 1));
-    g.addColorStop(1.00, rgba(lerpColor(BG_MID, BG_DEEP, midnightLift * 0.55), 1));
+    g.addColorStop(0.00, rgba(lerpColor(BG_DEEP, [1, 8, 30], midnightLift * 0.88), 1));
+    g.addColorStop(0.44, rgba(lerpColor(BG, BG_MID, brightLift * 0.35), 1));
+    g.addColorStop(1.00, rgba(lerpColor(BG, BG_DEEP, 0.38 + midnightLift * 0.28), 1));
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
 
-    // Amorphous blue blobs drifting across the field.
-    const cx1 = w * (0.36 + 0.10 * Math.sin(t * 0.9));
-    const cy1 = h * (0.40 + 0.09 * Math.cos(t * 0.73));
-    const cx2 = w * (0.66 + 0.09 * Math.cos(t * 0.81 + 0.7));
-    const cy2 = h * (0.60 + 0.10 * Math.sin(t * 0.67 - 0.4));
-    const pulseA = 0.10 + 0.12 * (0.5 + 0.5 * Math.sin(t * 1.9));
-    const pulseB = 0.08 + 0.10 * (0.5 + 0.5 * Math.cos(t * 1.6 - 0.5));
+    // Concentrated multi-modal blue pockets, slowly breathing in/out.
+    const pulseA = 0.06 + 0.07 * (0.5 + 0.5 * Math.sin(t * 1.4));
+    const pulseB = 0.05 + 0.07 * (0.5 + 0.5 * Math.cos(t * 1.15 - 0.3));
+    const pulseC = 0.04 + 0.06 * (0.5 + 0.5 * Math.sin(t * 1.05 + 1.2));
+    const pulseD = 0.03 + 0.05 * (0.5 + 0.5 * Math.cos(t * 0.92 + 0.6));
 
-    const blobA = ctx.createRadialGradient(cx1, cy1, d * 0.10, cx1, cy1, d * 0.68);
-    blobA.addColorStop(0.0, `rgba(72,186,255,${pulseA + brightLift * 0.08})`);
-    blobA.addColorStop(0.45, `rgba(24,122,238,${(pulseA * 0.58) + brightLift * 0.04})`);
-    blobA.addColorStop(1.0, "rgba(0,80,180,0)");
+    const b1x = w * (0.26 + 0.06 * Math.sin(t * 0.72));
+    const b1y = h * (0.28 + 0.05 * Math.cos(t * 0.66));
+    const b2x = w * (0.56 + 0.06 * Math.cos(t * 0.63 + 0.7));
+    const b2y = h * (0.48 + 0.05 * Math.sin(t * 0.59 - 0.4));
+    const b3x = w * (0.78 + 0.05 * Math.sin(t * 0.57 + 1.1));
+    const b3y = h * (0.30 + 0.05 * Math.cos(t * 0.54 + 0.5));
+    const b4x = w * (0.40 + 0.05 * Math.sin(t * 0.51 - 0.8));
+    const b4y = h * (0.72 + 0.05 * Math.cos(t * 0.48 - 0.1));
+
+    const blobA = ctx.createRadialGradient(b1x, b1y, d * 0.05, b1x, b1y, d * 0.30);
+    blobA.addColorStop(0.0, `rgba(92,204,255,${pulseA + brightLift * 0.06})`);
+    blobA.addColorStop(0.55, `rgba(26,132,246,${pulseA * 0.68})`);
+    blobA.addColorStop(1.0, "rgba(0,82,188,0)");
     ctx.fillStyle = blobA;
     ctx.fillRect(0, 0, w, h);
 
-    const blobB = ctx.createRadialGradient(cx2, cy2, d * 0.11, cx2, cy2, d * 0.64);
-    blobB.addColorStop(0.0, `rgba(18,146,255,${pulseB + brightLift * 0.08})`);
-    blobB.addColorStop(0.42, `rgba(8,92,214,${(pulseB * 0.62) + brightLift * 0.05})`);
-    blobB.addColorStop(1.0, "rgba(0,56,160,0)");
+    const blobB = ctx.createRadialGradient(b2x, b2y, d * 0.05, b2x, b2y, d * 0.28);
+    blobB.addColorStop(0.0, `rgba(70,182,255,${pulseB + brightLift * 0.05})`);
+    blobB.addColorStop(0.55, `rgba(18,112,228,${pulseB * 0.70})`);
+    blobB.addColorStop(1.0, "rgba(0,72,176,0)");
     ctx.fillStyle = blobB;
     ctx.fillRect(0, 0, w, h);
 
-    // Broad midnight wash that comes and goes.
-    const blueAura = ctx.createRadialGradient(w * 0.52, h * 0.50, d * 0.10, w * 0.52, h * 0.50, d * 0.84);
-    blueAura.addColorStop(0.0, `rgba(0,188,235,${0.03 + brightLift * 0.04})`);
-    blueAura.addColorStop(0.35, `rgba(0,120,220,${0.03 + brightLift * 0.03})`);
-    blueAura.addColorStop(1.0, "rgba(0,60,140,0)");
-    ctx.fillStyle = blueAura;
+    const blobC = ctx.createRadialGradient(b3x, b3y, d * 0.05, b3x, b3y, d * 0.26);
+    blobC.addColorStop(0.0, `rgba(58,170,255,${pulseC + brightLift * 0.05})`);
+    blobC.addColorStop(0.58, `rgba(14,100,220,${pulseC * 0.72})`);
+    blobC.addColorStop(1.0, "rgba(0,64,162,0)");
+    ctx.fillStyle = blobC;
     ctx.fillRect(0, 0, w, h);
-    const midnightVeil = ctx.createRadialGradient(w * 0.54, h * 0.50, d * 0.13, w * 0.54, h * 0.50, d * 0.90);
+
+    const blobD = ctx.createRadialGradient(b4x, b4y, d * 0.05, b4x, b4y, d * 0.24);
+    blobD.addColorStop(0.0, `rgba(52,154,248,${pulseD + brightLift * 0.04})`);
+    blobD.addColorStop(0.60, `rgba(12,92,208,${pulseD * 0.74})`);
+    blobD.addColorStop(1.0, "rgba(0,58,148,0)");
+    ctx.fillStyle = blobD;
+    ctx.fillRect(0, 0, w, h);
+
+    // Midnight core modulation to keep deep contrast.
+    const midnightVeil = ctx.createRadialGradient(w * 0.54, h * 0.50, d * 0.12, w * 0.54, h * 0.50, d * 0.72);
     midnightVeil.addColorStop(0.0, `rgba(4,18,52,${0.02 + midnightLift * 0.12})`);
     midnightVeil.addColorStop(0.7, `rgba(2,12,38,${0.02 + midnightLift * 0.16})`);
     midnightVeil.addColorStop(1.0, `rgba(1,8,24,${0.02 + midnightLift * 0.18})`);
@@ -856,6 +1047,8 @@
   let activeChases = [];
   let scenarioSignature = "";
   let rafId = 0;
+  /** Projected primary-instance positions from the last completed draw (for path-length–weighted orb timing). */
+  let lastNodeScreenPositions = new Map();
 
   function updateScenarioButtonsActive() {
     document.querySelectorAll(".scenario-btn").forEach(el => {
@@ -907,6 +1100,40 @@
     return 0;
   }
 
+  /**
+   * Turn equal per-edge time budget into lengths proportional to on-screen span so the orb
+   * moves at ~constant speed along the stitched scenario path. Falls back to uniform steps
+   * when positions are not yet available.
+   */
+  function computeEdgeTimeBudgets(routeNodes, posMap, baseStepMs) {
+    const N = routeNodes.length - 1;
+    if (N <= 0) return { durations: [], starts: [], totalMs: 0 };
+    const weights = [];
+    let sumW = 0;
+    for (let i = 0; i < N; i++) {
+      const a = routeNodes[i];
+      const b = routeNodes[i + 1];
+      const pa = posMap && posMap.get ? posMap.get(a) : null;
+      const pb = posMap && posMap.get ? posMap.get(b) : null;
+      let w = 1;
+      if (pa && pb && Number.isFinite(pa.x) && Number.isFinite(pb.x)) {
+        w = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+        if (w < 4) w = 4;
+      }
+      weights.push(w);
+      sumW += w;
+    }
+    const totalBudget = N * baseStepMs;
+    const durations = weights.map(w => (sumW > 0 ? (totalBudget * w) / sumW : baseStepMs));
+    const starts = [];
+    let acc = 0;
+    for (let i = 0; i < N; i++) {
+      starts.push(acc);
+      acc += durations[i];
+    }
+    return { durations, starts, totalMs: acc };
+  }
+
   /* ═══════════════════════════════════════════════════════
    * EDGE ACTIVATION  (Spec Section 4 — state system)
    *
@@ -928,22 +1155,26 @@
       const signal = ciscoSignalColorForIndex(ri);
       const elapsed = nowMs - chase.startedAt;
       const N = routeNodes.length - 1;
-      const stepMs = orbSpeedToTravelMs(flowTune.orbSpeed);
+      const baseStepMs = orbSpeedToTravelMs(flowTune.orbSpeed);
+      const { durations: edgeDurations, starts: edgeStarts, totalMs: pathTravelMs } =
+        computeEdgeTimeBudgets(routeNodes, lastNodeScreenPositions, baseStepMs);
       const trailMs = 900;
-      const resolutionStart = N * stepMs + trailMs;
+      const resolutionStart = pathTravelMs + trailMs;
       const totalMs = resolutionStart + SPEC.decayMs;
       if (elapsed > totalMs) continue;
       survivors.push(chase);
 
       for (let i = 0; i < N; i++) {
-        const edgeElapsed = elapsed - i * stepMs;
+        const dur = edgeDurations[i] || baseStepMs;
+        const edgeStart = edgeStarts[i] || 0;
+        const edgeElapsed = elapsed - edgeStart;
         if (edgeElapsed < 0) continue;
 
-        const orbT = clamp01(edgeElapsed / stepMs);
-        const orbActive = edgeElapsed >= 0 && edgeElapsed < stepMs;
-        const head = orbActive ? (0.70 + 0.30 * smoothstep(0, stepMs, edgeElapsed)) : 0;
-        const tail = edgeElapsed >= stepMs
-          ? Math.max(0, 0.52 * (1 - (edgeElapsed - stepMs) / trailMs))
+        const orbT = clamp01(edgeElapsed / dur);
+        const orbActive = edgeElapsed >= 0 && edgeElapsed < dur;
+        const head = orbActive ? (0.70 + 0.30 * smoothstep(0, dur, edgeElapsed)) : 0;
+        const tail = edgeElapsed >= dur
+          ? Math.max(0, 0.52 * (1 - (edgeElapsed - dur) / trailMs))
           : 0;
         let intensity = Math.max(head, tail);
 
@@ -964,11 +1195,27 @@
         }
       }
 
-      for (let i = 0; i < routeNodes.length; i++) {
-        const nodeArrivalMs = i * stepMs;
-        const pulse = pulseEnvelope(elapsed - nodeArrivalMs);
+      const K = routeNodes.length;
+      for (let k = 0; k < K; k++) {
+        let pulse = 0;
+        if (k === 0) {
+          const dur0 = edgeDurations[0] || baseStepMs;
+          const uLeave = clamp01(elapsed / dur0);
+          pulse = clamp01(1.0 - 0.55 * smoothstep(0.25, 1, uLeave));
+        } else {
+          const es = edgeStarts[k - 1] || 0;
+          const dur = edgeDurations[k - 1] || baseStepMs;
+          const u = clamp01((elapsed - es) / dur);
+          const approach = smoothstep(0.06, 1.0, u);
+          const arrivalT = es + dur;
+          const post = pulseEnvelope(elapsed - arrivalT);
+          pulse = clamp01(Math.max(approach * 0.96, post));
+        }
+        if (elapsed > resolutionStart) {
+          pulse *= 1 - clamp01((elapsed - resolutionStart) / SPEC.decayMs);
+        }
         if (pulse > 0.01) {
-          const nid = routeNodes[i];
+          const nid = routeNodes[k];
           const existing = nodeGlows.get(nid);
           if (!existing || pulse > existing.intensity) {
             nodeGlows.set(nid, { color: signal, intensity: pulse });
@@ -1034,7 +1281,7 @@
     const nodePositions  = new Map();
     const allInstances   = [];
     const instancesByNode = new Map();
-    const instanceCount  = Math.max(1, Math.round(flowTune.strandInstances));
+    const instanceCount  = IS_FIELD ? 1 : Math.max(1, Math.round(flowTune.strandInstances));
     const cx = w / 2;
 
     for (let ri = 0; ri < 6; ri++) {
@@ -1069,11 +1316,79 @@
       }
     }
 
+    /* 3a. Tween depth dots between adjacent nodes on each ring (field view only) */
+    if (IS_FIELD) {
+      const nPerGap = Math.max(0, Math.min(5, Math.floor(flowTune.tweenQty / 4)));
+      const jAmp = (flowTune.tweenJitter / 20) * 26;
+      const uBiasScale = (flowTune.tweenOffset / 20 - 0.5) * 0.42;
+      for (let ri = 0; ri < 6; ri++) {
+        const nodes = ringGroups[ri];
+        if (!nodes || nodes.length < 2) continue;
+        const halfSpread = ZONE_SPREAD[ri] * w * 0.5;
+        const vertexY = ZONE_VERTEX_Y[ri] * h;
+        const arcDepth = ZONE_ARC_DEPTH[ri] * h;
+        const totalSlots = nodes.length * instanceCount;
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const t0 = totalSlots <= 1 ? 0.5 : (i * instanceCount) / (totalSlots - 1);
+          const t1 = totalSlots <= 1 ? 0.5 : ((i + 1) * instanceCount) / (totalSlots - 1);
+          const span = t1 - t0;
+          if (nPerGap === 0 || Math.abs(span) < 1e-6) continue;
+          const uBias = uBiasScale * span;
+          const n = nodes[i];
+          const np = nodes[i + 1];
+          for (let k = 1; k <= nPerGap; k++) {
+            const frac = k / (nPerGap + 1);
+            let u = t0 + span * frac + uBias;
+            u = clamp(u, Math.min(t0, t1) + 1e-5, Math.max(t0, t1) - 1e-5);
+            const jh = hashStr(`tw|${ri}|${i}|${k}|${genSeed}`);
+            const jr = mulberry32(jh);
+            const jwx = (jr() - 0.5) * jAmp;
+            const jwy = (jr() - 0.5) * jAmp;
+            const normX = (u - 0.5) * 2;
+            const x = cx + normX * halfSpread + jwx;
+            const yTop = vertexY + arcDepth * normX * normX + jwy;
+            const yBot = (h - vertexY) - arcDepth * normX * normX - jwy;
+            const blend = clamp((u - t0) / span, 0, 1);
+            allInstances.push({
+              nodeId: n.id,
+              node: n,
+              tweenPeer: np,
+              tweenBlend: blend,
+              x: 0,
+              y: 0,
+              wx: x,
+              wy: yTop,
+              inst: -1,
+              ring: ri,
+              tNorm: u,
+              mirror: false,
+              isTween: true,
+            });
+            allInstances.push({
+              nodeId: n.id,
+              node: n,
+              tweenPeer: np,
+              tweenBlend: blend,
+              x: 0,
+              y: 0,
+              wx: x,
+              wy: yBot,
+              inst: -1,
+              ring: ri,
+              tNorm: u,
+              mirror: true,
+              isTween: true,
+            });
+          }
+        }
+      }
+    }
+
     /* 3b. Project all node instances through scene camera */
     for (const inst of allInstances) {
       const ringZ = -0.7 + (inst.ring / 5) * 1.4;
       const mirrorZ = inst.mirror ? 0.18 : -0.18;
-      const ghostZ = inst.inst * 0.018;
+      const ghostZ = inst.isTween ? -0.02 : inst.inst * 0.018;
       const p = projectScenePoint(inst.wx, inst.wy, ringZ + mirrorZ + ghostZ, w, h);
       inst.x = p.x;
       inst.y = p.y;
@@ -1085,6 +1400,7 @@
         nodePositions.set(inst.nodeId, { x: inst.x, y: inst.y });
       }
     }
+    lastNodeScreenPositions = new Map(nodePositions);
 
     /* 4. Zone parabola guidelines (top + mirrored bottom) */
     ctx.save();
@@ -1118,65 +1434,68 @@
     }
     ctx.restore();
 
-    /* 5. Vertical curtain strands (top drop down, bottom grow up) */
+    /* 5. Vertical curtain strands OR organic particle waves (field mode) */
     const strandFloor   = h * 0.96;
     const strandCeiling = h * 0.04;
 
-    ctx.save();
-    ctx.lineCap = "round";
-    for (const inst of allInstances) {
-      const n = inst.node;
-      const tc = typeColor(n.type);
-      const deg = degrees[n.id] || 1;
-      const primary = inst.inst === 0;
-      const dir = inst.mirror ? -1 : 1;
+    if (IS_FIELD) {
+      drawOrganicParticleField(w, h, pipe, instancesByNode, degrees, nowMs);
+    } else {
+      ctx.save();
+      ctx.lineCap = "round";
+      for (const inst of allInstances) {
+        const n = inst.node;
+        const tc = typeColor(n.type);
+        const deg = degrees[n.id] || 1;
+        const primary = inst.inst === 0;
+        const dir = inst.mirror ? -1 : 1;
 
-      const baseCount = Math.max(1, Math.round(Math.sqrt(deg) * 1.6 * flowTune.strandSpread));
-      const count = primary ? baseCount : Math.max(1, Math.ceil(baseCount * 0.35));
-      const spread = Math.max(1.5, count * 0.9 * flowTune.strandSpread);
+        const baseCount = Math.max(1, Math.round(Math.sqrt(deg) * 1.6 * flowTune.strandSpread));
+        const count = primary ? baseCount : Math.max(1, Math.ceil(baseCount * 0.35));
+        const spread = Math.max(1.5, count * 0.9 * flowTune.strandSpread);
 
-      const seed = hashStr(inst.nodeId + ":" + inst.inst + (inst.mirror ? ":m" : ""));
-      const rn = mulberry32(seed);
-      const centerFac = 1 - Math.pow((inst.tNorm - 0.5) * 2, 2);
-      const maxReach = inst.mirror ? (inst.y - strandCeiling) : (strandFloor - inst.y);
-      const envelopeH = maxReach * (0.25 + 0.75 * centerFac);
+        const seed = hashStr(inst.nodeId + ":" + inst.inst + (inst.mirror ? ":m" : ""));
+        const rn = mulberry32(seed);
+        const centerFac = 1 - Math.pow((inst.tNorm - 0.5) * 2, 2);
+        const maxReach = inst.mirror ? (inst.y - strandCeiling) : (strandFloor - inst.y);
+        const envelopeH = maxReach * (0.25 + 0.75 * centerFac);
 
-      for (let s = 0; s < count; s++) {
-        const ct = count === 1 ? 0 : (s / (count - 1) - 0.5);
-        const xOff = ct * spread + (rn() - 0.5) * flowTune.arcJitter * 0.7;
-        const hVar = 0.78 + rn() * 0.22;
-        const edgeNorm = Math.abs(ct) * 2;
-        // As spread increases, trim the outer offsets to form a bell profile.
-        const spreadBellStrength = clamp01((flowTune.strandSpread - 1.0) / 8.0);
-        const bellMul = 1 - Math.pow(edgeNorm, 1.35) * (0.08 + 0.62 * spreadBellStrength);
-        const sH = envelopeH * hVar * clamp(bellMul, 0.30, 1.0);
-        if (sH < 5) continue;
+        for (let s = 0; s < count; s++) {
+          const ct = count === 1 ? 0 : (s / (count - 1) - 0.5);
+          const xOff = ct * spread + (rn() - 0.5) * flowTune.arcJitter * 0.7;
+          const hVar = 0.78 + rn() * 0.22;
+          const edgeNorm = Math.abs(ct) * 2;
+          const spreadBellStrength = clamp01((flowTune.strandSpread - 1.0) / 8.0);
+          const bellMul = 1 - Math.pow(edgeNorm, 1.35) * (0.08 + 0.62 * spreadBellStrength);
+          const sH = envelopeH * hVar * clamp(bellMul, 0.30, 1.0);
+          if (sH < 5) continue;
 
-        const sx = inst.x + xOff;
-        const alphaBase = primary ? 0.26 : 0.08;
+          const sx = inst.x + xOff;
+          const alphaBase = primary ? 0.34 : 0.12;
 
-        const endY = inst.y + dir * sH;
-        const grad = ctx.createLinearGradient(sx, inst.y, sx, endY);
-        grad.addColorStop(0,    rgba(STRAND_NEUTRAL, alphaBase));
-        grad.addColorStop(0.38, rgba(STRAND_NEUTRAL, alphaBase * 0.96));
-        grad.addColorStop(0.48, rgba(lerpColor(STRAND_NEUTRAL, tc, 0.26), alphaBase * 0.78));
-        grad.addColorStop(0.56, rgba(lerpColor(STRAND_NEUTRAL, tc, 0.34), alphaBase * 0.86));
-        grad.addColorStop(0.64, rgba(STRAND_NEUTRAL, alphaBase * 0.94));
-        grad.addColorStop(1.0,  rgba(STRAND_NEUTRAL, alphaBase * 0.80));
+          const endY = inst.y + dir * sH;
+          const grad = ctx.createLinearGradient(sx, inst.y, sx, endY);
+          grad.addColorStop(0,    rgba(STRAND_NEUTRAL, alphaBase));
+          grad.addColorStop(0.38, rgba(STRAND_NEUTRAL, alphaBase * 0.96));
+          grad.addColorStop(0.48, rgba(lerpColor(STRAND_NEUTRAL, tc, 0.26), alphaBase * 0.78));
+          grad.addColorStop(0.56, rgba(lerpColor(STRAND_NEUTRAL, tc, 0.34), alphaBase * 0.86));
+          grad.addColorStop(0.64, rgba(STRAND_NEUTRAL, alphaBase * 0.94));
+          grad.addColorStop(1.0,  rgba(STRAND_NEUTRAL, alphaBase * 0.80));
 
-        ctx.beginPath();
-        ctx.moveTo(sx, inst.y);
-        const ws = (seed + s) * 0.0013;
-        for (let seg = 1; seg <= 24; seg++) {
-          const st = seg / 24;
-          ctx.lineTo(sx + flowWiggle(st, ws, 0.35 + flowTune.arcJitter * 0.12), inst.y + dir * sH * st);
+          ctx.beginPath();
+          ctx.moveTo(sx, inst.y);
+          const ws = (seed + s) * 0.0013;
+          for (let seg = 1; seg <= 24; seg++) {
+            const st = seg / 24;
+            ctx.lineTo(sx + flowWiggle(st, ws, 0.35 + flowTune.arcJitter * 0.12), inst.y + dir * sH * st);
+          }
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = primary ? (0.42 + rn() * 0.42) : (0.24 + rn() * 0.20);
+          ctx.stroke();
         }
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = primary ? (0.30 + rn() * 0.35) : (0.18 + rn() * 0.14);
-        ctx.stroke();
       }
+      ctx.restore();
     }
-    ctx.restore();
 
     /* 6. Highway arc-and-tangent strands (mostly straight, few bends) */
     ctx.save();
@@ -1231,13 +1550,13 @@
           const hasSignal = act && act.intensity > 0.01;
           if (hasSignal) {
             const hGrad = ctx.createLinearGradient(x1, iA.y, x2, bestB.y);
-            const hotA = rgba(lerpColor(MAGENTA, WHITE, 0.16), alpha * (0.94 + act.intensity * 0.34));
-            const hotB = rgba(lerpColor(ORANGE, WHITE, 0.12), alpha * (0.92 + act.intensity * 0.30));
-            hGrad.addColorStop(0.00, rgba(STRAND_NEUTRAL, alpha * 0.65));
-            hGrad.addColorStop(0.14, hotA);
-            hGrad.addColorStop(0.50, hotB);
-            hGrad.addColorStop(0.86, hotA);
-            hGrad.addColorStop(1.00, rgba(STRAND_NEUTRAL, alpha * 0.65));
+            const amp = clamp(8.0 + act.intensity * 4.0, 8.5, 12.0); // extreme perceived brightness amp
+            const whiteCore = [255, 255, 255];
+            const brightNeutral = lerpColor(STRAND_NEUTRAL, whiteCore, clamp01(0.82 + 0.18 * act.intensity));
+            hGrad.addColorStop(0.00, rgba(brightNeutral, Math.min(1, alpha * amp * 0.72)));
+            hGrad.addColorStop(0.48, rgba(whiteCore, Math.min(1, alpha * amp)));
+            hGrad.addColorStop(0.52, rgba(whiteCore, Math.min(1, alpha * amp)));
+            hGrad.addColorStop(1.00, rgba(brightNeutral, Math.min(1, alpha * amp * 0.72)));
             ctx.strokeStyle = hGrad;
           } else if (htc) {
             const hGrad = ctx.createLinearGradient(x1, iA.y, x2, bestB.y);
@@ -1253,9 +1572,9 @@
 
           const y1 = iA.y;
           const y2 = bestB.y;
-          const bendQty = clamp(Math.round(flowTune.bendQuantity), 1, 3);
+          const bendQty = clamp(Math.round(flowTune.bendQuantity), 1, 8);
           const pathPts = buildHighwayPolyline(x1, y1, x2, y2, dx, dy, tangentFrac, bendQty);
-          const filletMul = 0.25 + (flowTune.bendFillet / 20) * 1.75;
+          const filletMul = 0.22 + (flowTune.bendFillet / 40) * 2.25;
           const filletR = clamp((Math.min(Math.abs(dx), Math.abs(dy)) * 0.18 + 6) * filletMul, 2, 42);
           ctx.beginPath();
           traceFilletedPolyline(ctx, pathPts, filletR);
@@ -1265,8 +1584,19 @@
             ctx.save();
             ctx.globalCompositeOperation = "source-over";
             ctx.setLineDash([]);
-            ctx.lineWidth = lw * 2.8;
-            ctx.strokeStyle = rgba(act.signal, 0.14 + act.intensity * 0.30);
+            // Faint color bloom around bright white strand (strand itself remains white/neutral).
+            const bloomG = ctx.createLinearGradient(x1, iA.y, x2, bestB.y);
+            // 3x vibrancy boost for gradient tint around the active path.
+            bloomG.addColorStop(0.00, `rgba(${MAGENTA[0]},${MAGENTA[1]},${MAGENTA[2]},${0.66 + act.intensity * 0.34})`);
+            bloomG.addColorStop(0.50, `rgba(${ORANGE[0]},${ORANGE[1]},${ORANGE[2]},${0.78 + act.intensity * 0.36})`);
+            bloomG.addColorStop(1.00, `rgba(${MAGENTA[0]},${MAGENTA[1]},${MAGENTA[2]},${0.66 + act.intensity * 0.34})`);
+            ctx.lineWidth = lw * 8.0;
+            ctx.strokeStyle = bloomG;
+            ctx.beginPath();
+            traceFilletedPolyline(ctx, pathPts, filletR);
+            ctx.stroke();
+            ctx.lineWidth = lw * 5.5;
+            ctx.strokeStyle = "rgba(255,255,255,0.50)";
             ctx.beginPath();
             traceFilletedPolyline(ctx, pathPts, filletR);
             ctx.stroke();
@@ -1274,24 +1604,64 @@
           }
 
           if (hasSignal && primary && act.orbActive && si === Math.floor(drawCnt / 2)) {
-            const orbP = pointOnPolyline(pathPts, act.orbT);
-            const orbR = 2.1 + act.intensity * 1.2;
-            const glowScale = 0.65 + (flowTune.orbGlowDistance / 20) * 2.2;
-            const rampR = Math.max(2.2, orbR * 2.2);
-            const og = ctx.createRadialGradient(orbP.x, orbP.y, 0, orbP.x, orbP.y, rampR * glowScale);
-            og.addColorStop(0.00, "rgba(255,255,255,0.98)");
-            og.addColorStop(0.18, `rgba(${MAGENTA[0]},${MAGENTA[1]},${MAGENTA[2]},0.90)`);
-            og.addColorStop(0.46, `rgba(255,128,96,0.72)`);
-            og.addColorStop(0.75, `rgba(${ORANGE[0]},${ORANGE[1]},${ORANGE[2]},0.46)`);
-            og.addColorStop(1.00, "rgba(255,116,56,0)");
-            ctx.fillStyle = og;
-            ctx.beginPath();
-            ctx.arc(orbP.x, orbP.y, rampR * glowScale, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(orbP.x, orbP.y, orbR, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(255,236,242,0.98)";
-            ctx.fill();
+            // In-strand traveling burst: color window is painted inside the same routed path.
+            const headT = clamp01(act.orbT);
+            const nodeR = nodeRadius(iA.node.ringId);
+            const burstLenPx = Math.max(6, nodeR * 5); // required: 5x node radius
+            const pathPtsFlat = flattenFilletedPolyline(pathPts, filletR);
+            const pathLenPx = Math.max(1, polylineLength(pathPtsFlat));
+            const tailLen = clamp(burstLenPx / pathLenPx, 0.015, 0.20);
+            const leadLen = 0.028;
+            const tStart = Math.max(0, headT - tailLen);
+            const tEnd = Math.min(1, headT + leadLen);
+            const steps = 48;
+
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.lineWidth = lw * 4.8;
+
+            for (let bi = 0; bi < steps; bi++) {
+              const u0 = bi / steps;
+              const u1 = (bi + 1) / steps;
+              const um = (u0 + u1) * 0.5;
+              if (um < tStart || um > tEnd) continue;
+
+              const p0 = pointOnPolyline(pathPtsFlat, u0);
+              const p1 = pointOnPolyline(pathPtsFlat, u1);
+              const rel = (um - tStart) / Math.max(1e-6, (tEnd - tStart)); // 0 tail -> 1 head
+              const bright = rel < 0.72
+                ? lerpColor(STRAND_NEUTRAL, [255, 255, 255], 0.55 + rel * 0.35)
+                : [255, 255, 255];
+              const a = (0.75 + Math.pow(rel, 1.2) * 1.45) * clamp(1.0 + act.intensity * 1.2, 0, 2.4);
+
+              ctx.strokeStyle = rgba(bright, Math.min(1, a));
+              ctx.beginPath();
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+              ctx.stroke();
+            }
+
+            // Extra bloom pass for moving burst core.
+            ctx.globalCompositeOperation = "screen";
+            ctx.lineWidth = lw * (8.0 + flowTune.orbGlowDistance * 0.32);
+            for (let bi = 0; bi < steps; bi++) {
+              const u0 = bi / steps;
+              const u1 = (bi + 1) / steps;
+              const um = (u0 + u1) * 0.5;
+              if (um < tStart || um > tEnd) continue;
+              const rel = (um - tStart) / Math.max(1e-6, (tEnd - tStart));
+              const p0 = pointOnPolyline(pathPtsFlat, u0);
+              const p1 = pointOnPolyline(pathPtsFlat, u1);
+              const bloomA = 0.14 + Math.pow(rel, 1.15) * 0.42;
+              ctx.strokeStyle = `rgba(255,255,255,${Math.min(0.7, bloomA)})`;
+              ctx.beginPath();
+              ctx.moveTo(p0.x, p0.y);
+              ctx.lineTo(p1.x, p1.y);
+              ctx.stroke();
+            }
+            ctx.restore();
           }
           ctx.restore();
         }
@@ -1299,47 +1669,56 @@
     }
     ctx.restore();
 
-    /* 7. Accent dots along curtain strands */
-    ctx.save();
-    const dotRng = mulberry32(genSeed ^ 0x1234);
-    const dotCount = Math.min(allInstances.length * 6, 400);
-    for (let di = 0; di < dotCount; di++) {
-      const dInst = allInstances[Math.floor(dotRng() * allInstances.length)];
-      if (!dInst) continue;
-      const dPrimary = dInst.inst === 0;
-      const dCenterFac = 1 - Math.pow((dInst.tNorm - 0.5) * 2, 2);
-      const dDir = dInst.mirror ? -1 : 1;
-      const dMaxH = (dInst.mirror ? (dInst.y - strandCeiling) : (strandFloor - dInst.y)) * (0.25 + 0.75 * dCenterFac);
-      const dt = dotRng() * 0.88 + 0.05;
-      const dotX = dInst.x + (dotRng() - 0.5) * flowTune.strandSpread * 2.5;
-      const dotY = dInst.y + dDir * dMaxH * dt;
-      const dotR = 0.5 + dotRng() * 0.9;
-      const dotAlpha = dPrimary ? (0.25 + dotRng() * 0.42) : (0.06 + dotRng() * 0.10);
+    /* 7. Accent dots along curtain strands (skipped in field mode — particle layer covers this) */
+    if (!IS_FIELD) {
+      ctx.save();
+      const dotRng = mulberry32(genSeed ^ 0x1234);
+      const dotCount = Math.min(allInstances.length * 6, 400);
+      for (let di = 0; di < dotCount; di++) {
+        const dInst = allInstances[Math.floor(dotRng() * allInstances.length)];
+        if (!dInst) continue;
+        const dPrimary = dInst.inst === 0;
+        const dCenterFac = 1 - Math.pow((dInst.tNorm - 0.5) * 2, 2);
+        const dDir = dInst.mirror ? -1 : 1;
+        const dMaxH = (dInst.mirror ? (dInst.y - strandCeiling) : (strandFloor - dInst.y)) * (0.25 + 0.75 * dCenterFac);
+        const dt = dotRng() * 0.88 + 0.05;
+        const dotX = dInst.x + (dotRng() - 0.5) * flowTune.strandSpread * 2.5;
+        const dotY = dInst.y + dDir * dMaxH * dt;
+        const dotR = 0.5 + dotRng() * 0.9;
+        const dotAlpha = dPrimary ? (0.25 + dotRng() * 0.42) : (0.06 + dotRng() * 0.10);
 
-      ctx.beginPath();
-      ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
-      ctx.fillStyle = rgba(NODE_FILL, dotAlpha);
-      ctx.fill();
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+        ctx.fillStyle = rgba(NODE_FILL, dotAlpha);
+        ctx.fill();
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
-    /* 8. Node instances (primary + ghost) */
+    /* 8. Node instances (tween depth → primary + ghost) */
     ctx.save();
-    for (const inst of allInstances) {
+    function drawOneNodeInstance(inst) {
       const primary = inst.inst === 0;
-      const r   = nodeRadius(inst.node.ringId) * (primary ? 1.0 : 0.40);
-      const col = typeColor(inst.node.type);
-      const a   = primary ? 0.94 : 0.16;
+      const tween = !!inst.isTween;
+      const r = nodeRadius(inst.node.ringId) * (tween ? 0.36 : primary ? 1.0 : 0.40);
+      const col = tween && inst.tweenPeer
+        ? lerpColor(
+            typeColor(inst.node.type),
+            typeColor(inst.tweenPeer.type),
+            inst.tweenBlend != null ? inst.tweenBlend : 0.5
+          )
+        : typeColor(inst.node.type);
+      const a = tween ? 0.32 : primary ? 0.94 : 0.16;
 
-      if (primary) {
+      if (primary && !tween) {
         const glow = nodeGlows.get(inst.nodeId);
         if (glow && glow.intensity > 0.01) {
-          const gr = ctx.createRadialGradient(inst.x, inst.y, r, inst.x, inst.y, r + 5 + glow.intensity * 6);
-          gr.addColorStop(0, rgba(glow.color, 0.24 * glow.intensity));
+          const gr = ctx.createRadialGradient(inst.x, inst.y, r, inst.x, inst.y, r + 7 + glow.intensity * 8);
+          gr.addColorStop(0, rgba(glow.color, 0.34 * glow.intensity));
           gr.addColorStop(1, rgba(glow.color, 0));
           ctx.fillStyle = gr;
           ctx.beginPath();
-          ctx.arc(inst.x, inst.y, r + 5 + glow.intensity * 6, 0, Math.PI * 2);
+          ctx.arc(inst.x, inst.y, r + 7 + glow.intensity * 8, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -1349,13 +1728,28 @@
       ctx.fillStyle = rgba(NODE_FILL, a);
       ctx.fill();
 
-      if (primary) {
+      if (tween) {
+        ctx.beginPath();
+        ctx.arc(inst.x, inst.y, r + 0.9, 0, Math.PI * 2);
+        ctx.strokeStyle = rgba(col, 0.22);
+        ctx.lineWidth = 0.45;
+        ctx.stroke();
+      } else if (primary) {
         ctx.beginPath();
         ctx.arc(inst.x, inst.y, r + 1.2, 0, Math.PI * 2);
         ctx.strokeStyle = rgba(col, 0.68);
         ctx.lineWidth = 0.7;
         ctx.stroke();
       }
+    }
+
+    for (const inst of allInstances) {
+      if (!inst.isTween) continue;
+      drawOneNodeInstance(inst);
+    }
+    for (const inst of allInstances) {
+      if (inst.isTween) continue;
+      drawOneNodeInstance(inst);
     }
     ctx.restore();
 
@@ -1419,6 +1813,7 @@
         drawLabelBadge(n, p, false);
       }
       for (const inst of allInstances) {
+        if (inst.isTween) continue;
         if (!inst.mirror || inst.inst !== 0) continue;
         if (inst.node.ringId !== "core" && inst.ring !== 5) continue;
         drawLabelBadge(inst.node, inst, true);
@@ -1456,6 +1851,10 @@
     /* 11. End zoom/pan transform */
     ctx.restore();
 
+    if (IS_FIELD && window.GenerativeFieldBg) {
+      window.GenerativeFieldBg.drawVignette(ctx, w, h);
+    }
+
     /* 12. Grain (screen-space) */
     drawGrain();
 
@@ -1467,6 +1866,9 @@
    * ═══════════════════════════════════════════════════════ */
   function drawFallback(w, h, nowMs) {
     drawFieldBackground(w, h, nowMs);
+    if (IS_FIELD && window.GenerativeFieldBg) {
+      window.GenerativeFieldBg.drawVignette(ctx, w, h);
+    }
     drawGrain();
     ctx.save();
     ctx.font = '12px "IBM Plex Mono", ui-monospace, monospace';
@@ -1481,6 +1883,127 @@
    * SCENE CONTROLS  (3D rotation, spin)
    * ═══════════════════════════════════════════════════════ */
   let genSeed = (Date.now() & 0xffffffff) >>> 0;
+
+  /**
+   * Organic particle waves (field mode): dots hug each highway polyline with a loose
+   * perpendicular wave + slow drift along the wire (network / agentic motion).
+   * Uses flowTune.strandSpread for density and wave strength (Tune Flow: "Particle waves").
+   */
+  function drawOrganicParticleField(w, h, pipe, instancesByNode, degrees, nowMs) {
+    const t = nowMs * 0.001;
+    const spread = flowTune.strandSpread;
+    const density = 0.034 + spread * 0.0075;
+    const waveAmp = 2.6 + spread * 0.62;
+    let budget = Math.min(1050, Math.floor(380 + spread * 58));
+    const edges = Array.isArray(pipe.edges) ? pipe.edges : [];
+
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineCap = "round";
+
+    particleEdges:
+    for (const edge of edges) {
+      const insA = instancesByNode.get(edge.from) || [];
+      const insB = instancesByNode.get(edge.to) || [];
+      if (!insA.length || !insB.length) continue;
+
+      const style = edge.style || "solid";
+      const degA = degrees[edge.from] || 1;
+      const degB = degrees[edge.to] || 1;
+      const sCount = edgeStrandCount(style, degA, degB);
+      const sSpread = Math.max(1, sCount * 0.6);
+      const topA = insA.filter(i => !i.mirror);
+      const botB = insB.filter(i => i.mirror);
+      const htc = typeColor(insA[0].node.type);
+      const ek = edgeKey(edge.from, edge.to);
+      const ep = hashStr(ek) * 0.00012;
+
+      for (const iA of topA) {
+        if (iA.inst !== 0) continue;
+        let bestB = botB[0], bestD = Infinity;
+        for (const iB of botB) {
+          const d = Math.abs(iA.x - iB.x);
+          if (d < bestD) { bestD = d; bestB = iB; }
+        }
+        if (!bestB) continue;
+
+        const dy = bestB.y - iA.y;
+        const dx = bestB.x - iA.x;
+        const hFrac = Math.abs(dx) / Math.max(1, w * 0.5);
+        const tangentFrac = clamp(0.30 + hFrac * 0.18, 0.18, 0.50);
+        const bendQty = clamp(Math.round(flowTune.bendQuantity), 1, 8);
+        const filletMul = 0.22 + (flowTune.bendFillet / 40) * 2.25;
+        const filletR = clamp((Math.min(Math.abs(dx), Math.abs(dy)) * 0.18 + 6) * filletMul, 2, 42);
+        const drawCnt = Math.max(1, sCount);
+        const siMid = Math.max(0, Math.floor((drawCnt - 1) / 2));
+        const sOff = drawCnt <= 1 ? 0 : ((siMid / Math.max(1, drawCnt - 1)) - 0.5) * sSpread;
+
+        const x1 = iA.x + sOff;
+        const x2 = bestB.x + sOff;
+        const y1 = iA.y;
+        const y2 = bestB.y;
+        const pathPts = buildHighwayPolyline(x1, y1, x2, y2, dx, dy, tangentFrac, bendQty);
+        const pathPtsFlat = flattenFilletedPolyline(pathPts, filletR);
+        const pathLen = polylineLength(pathPtsFlat);
+        if (pathLen < 4) continue;
+
+        let nDots = Math.max(5, Math.floor(pathLen * density));
+        nDots = Math.min(34, nDots, budget);
+        if (nDots <= 0) continue;
+        budget -= nDots;
+
+        for (let j = 0; j < nDots; j++) {
+          const h = hashStr(`${ek}|${j}|${genSeed}`) >>> 0;
+          const rn = mulberry32(h);
+          const slot = (j + 0.45 + rn() * 0.12) / nDots;
+          const speed = 0.018 + (h % 1200) / 22000;
+          const phase = (h % 1000) / 1300;
+          let u = (slot + t * speed + phase * 0.14) % 1;
+          if (u < 0) u += 1;
+
+          const tan = pointAndTangentOnPolyline(pathPtsFlat, u);
+          const nx = -tan.ty;
+          const ny = tan.tx;
+          const nl = Math.hypot(nx, ny) || 1;
+          const nnx = nx / nl;
+          const nny = ny / nl;
+
+          const wob =
+            Math.sin(u * Math.PI * 18 + t * 2.65 + ep) * 0.52 +
+            Math.sin(u * Math.PI * 36 - t * 2.05 + ep * 1.7) * 0.26 +
+            Math.sin(u * Math.PI * 8 + t * 0.72 + j * 0.31) * 0.22;
+          const offset = waveAmp * wob + (rn() - 0.5) * 1.65;
+          const along = Math.sin(t * 2.85 + u * 22 + ep) * 1.15;
+
+          const px = tan.x + nnx * offset + tan.tx * along;
+          const py = tan.y + nny * offset + tan.ty * along;
+
+          const pulse = 0.45 + 0.55 * Math.sin(t * 1.9 + u * 24 + (h % 17));
+          const a = Math.min(0.28, (0.055 + spread * 0.009) * pulse);
+          const tint = lerpColor(STRAND_NEUTRAL, htc, 0.14 + (h % 6) * 0.035);
+          const fiber = 1.8 + rn() * 2.8;
+          const jx = (rn() - 0.5) * 0.55;
+          const jy = (rn() - 0.5) * 0.55;
+          ctx.strokeStyle = rgba(tint, a);
+          ctx.lineWidth = 0.42 + rn() * 0.38;
+          ctx.beginPath();
+          ctx.moveTo(
+            px - tan.tx * fiber * 0.5 + nnx * jx,
+            py - tan.ty * fiber * 0.5 + nny * jy
+          );
+          ctx.lineTo(
+            px + tan.tx * fiber * 0.5 - nnx * jx,
+            py + tan.ty * fiber * 0.5 - nny * jy
+          );
+          ctx.stroke();
+        }
+        if (budget <= 0) break particleEdges;
+      }
+    }
+
+    ctx.restore();
+  }
+
   let lastPipeRaw = "";
   let lastSceneTickMs = performance.now();
   let sceneDragging = false;
@@ -1624,167 +2147,121 @@
     btn.textContent = "Tune Flow";
     document.body.appendChild(btn);
 
+    const R = typeof window !== "undefined" && window.PulseModalRegistry;
+    if (!R) {
+      console.error("Load shared-modal-registry.js before generative.js for Tune Flow.");
+      return;
+    }
+
     const modal = document.createElement("div");
     modal.className = "flow-tune-modal";
     modal.hidden = true;
-    modal.innerHTML = `
-      <h3 class="flow-tune-title">Debug / Flow Tune</h3>
-      <div class="flow-tune-row">
-        <label>Arc jitter <span id="flow-val-jitter"></span></label>
-        <input id="flow-jitter" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>Arc inconsistency <span id="flow-val-inconsistency"></span></label>
-        <input id="flow-inconsistency" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>Strand spread <span id="flow-val-spread"></span></label>
-        <input id="flow-spread" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>Strand instances <span id="flow-val-instances"></span></label>
-        <input id="flow-instances" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>3D depth <span id="flow-val-depth"></span></label>
-        <input id="flow-depth" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>Perspective <span id="flow-val-perspective"></span></label>
-        <input id="flow-perspective" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>Spin speed <span id="flow-val-spinspeed"></span></label>
-        <input id="flow-spinspeed" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>Orb speed <span id="flow-val-orbspeed"></span></label>
-        <input id="flow-orbspeed" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>Orb glow distance <span id="flow-val-orbglow"></span></label>
-        <input id="flow-orbglow" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>Bend fillet <span id="flow-val-bendfillet"></span></label>
-        <input id="flow-bendfillet" type="range" min="0" max="20" step="0.01" />
-      </div>
-      <div class="flow-tune-row">
-        <label>Bend quantity <span id="flow-val-bendqty"></span></label>
-        <input id="flow-bendqty" type="range" min="1" max="3" step="1" />
-      </div>
-      <div class="flow-tune-actions">
-        <button type="button" id="flow-reset">Reset</button>
-      </div>
-    `;
+    modal.innerHTML = R.buildFlowTuneModalHtml(IS_FIELD);
     document.body.appendChild(modal);
 
-    const refs = {
-      jitter:       /** @type {HTMLInputElement} */ (modal.querySelector("#flow-jitter")),
-      inconsistency:/** @type {HTMLInputElement} */ (modal.querySelector("#flow-inconsistency")),
-      spread:       /** @type {HTMLInputElement} */ (modal.querySelector("#flow-spread")),
-      instances:    /** @type {HTMLInputElement} */ (modal.querySelector("#flow-instances")),
-      depth:        /** @type {HTMLInputElement} */ (modal.querySelector("#flow-depth")),
-      perspective:  /** @type {HTMLInputElement} */ (modal.querySelector("#flow-perspective")),
-      spinSpeed:    /** @type {HTMLInputElement} */ (modal.querySelector("#flow-spinspeed")),
-      orbSpeed:     /** @type {HTMLInputElement} */ (modal.querySelector("#flow-orbspeed")),
-      orbGlow:      /** @type {HTMLInputElement} */ (modal.querySelector("#flow-orbglow")),
-      bendFillet:   /** @type {HTMLInputElement} */ (modal.querySelector("#flow-bendfillet")),
-      bendQty:      /** @type {HTMLInputElement} */ (modal.querySelector("#flow-bendqty")),
-      valJitter:       modal.querySelector("#flow-val-jitter"),
-      valInconsistency:modal.querySelector("#flow-val-inconsistency"),
-      valSpread:       modal.querySelector("#flow-val-spread"),
-      valInstances:    modal.querySelector("#flow-val-instances"),
-      valDepth:        modal.querySelector("#flow-val-depth"),
-      valPerspective:  modal.querySelector("#flow-val-perspective"),
-      valSpinSpeed:    modal.querySelector("#flow-val-spinspeed"),
-      valOrbSpeed:     modal.querySelector("#flow-val-orbspeed"),
-      valOrbGlow:      modal.querySelector("#flow-val-orbglow"),
-      valBendFillet:   modal.querySelector("#flow-val-bendfillet"),
-      valBendQty:      modal.querySelector("#flow-val-bendqty"),
-      reset:        /** @type {HTMLButtonElement} */ (modal.querySelector("#flow-reset")),
-    };
+    const modalRows = R.getStrandModalRows(IS_FIELD);
+    function tuneInput(row) {
+      return /** @type {HTMLInputElement | null} */ (modal.querySelector(`#${row.inputId}`));
+    }
+    function tuneValEl(row) {
+      return modal.querySelector(`#${row.valId}`);
+    }
+
+    function formatStrandTuneVal(row) {
+      if (row.format === "spinRps") {
+        return `${scene3d.spinSpeed.toFixed(2)} (${spinDialToRevPerSec(scene3d.spinSpeed).toFixed(2)} rps)`;
+      }
+      if (row.format === "orbSec") {
+        return `${flowTune.orbSpeed.toFixed(2)} (${(orbSpeedToTravelMs(flowTune.orbSpeed) / 1000).toFixed(2)}s/edge)`;
+      }
+      if (row.format === "tweenGap") {
+        const n = Math.max(0, Math.min(5, Math.floor(flowTune.tweenQty / 4)));
+        return `${flowTune.tweenQty.toFixed(1)} → ${n}/gap`;
+      }
+      if (row.format === "int") {
+        const v = row.sceneKey ? scene3d[row.sceneKey] : flowTune[row.flowKey];
+        return String(Math.round(/** @type {number} */ (v)));
+      }
+      const v = row.sceneKey ? scene3d[row.sceneKey] : flowTune[row.flowKey];
+      return typeof v === "number" ? v.toFixed(2) : "";
+    }
 
     const syncUi = () => {
-      refs.jitter.value        = String(flowTune.arcJitter);
-      refs.inconsistency.value = String(flowTune.arcInconsistency);
-      refs.spread.value        = String(flowTune.strandSpread);
-      refs.instances.value     = String(flowTune.strandInstances);
-      refs.depth.value         = String(scene3d.depth);
-      refs.perspective.value   = String(scene3d.perspective);
-      refs.spinSpeed.value     = String(scene3d.spinSpeed);
-      refs.orbSpeed.value      = String(flowTune.orbSpeed);
-      refs.orbGlow.value       = String(flowTune.orbGlowDistance);
-      refs.bendFillet.value    = String(flowTune.bendFillet);
-      refs.bendQty.value       = String(Math.round(flowTune.bendQuantity));
-      refs.valJitter.textContent        = flowTune.arcJitter.toFixed(2);
-      refs.valInconsistency.textContent = flowTune.arcInconsistency.toFixed(2);
-      refs.valSpread.textContent        = flowTune.strandSpread.toFixed(2);
-      refs.valInstances.textContent     = flowTune.strandInstances.toFixed(2);
-      refs.valDepth.textContent         = scene3d.depth.toFixed(2);
-      refs.valPerspective.textContent   = scene3d.perspective.toFixed(2);
-      refs.valSpinSpeed.textContent     = `${scene3d.spinSpeed.toFixed(2)} (${spinDialToRevPerSec(scene3d.spinSpeed).toFixed(2)} rps)`;
-      refs.valOrbSpeed.textContent      = `${flowTune.orbSpeed.toFixed(2)} (${(orbSpeedToTravelMs(flowTune.orbSpeed) / 1000).toFixed(2)}s/edge)`;
-      refs.valOrbGlow.textContent       = flowTune.orbGlowDistance.toFixed(2);
-      refs.valBendFillet.textContent    = flowTune.bendFillet.toFixed(2);
-      refs.valBendQty.textContent       = String(Math.round(flowTune.bendQuantity));
+      for (const row of modalRows) {
+        const input = tuneInput(row);
+        const valEl = tuneValEl(row);
+        if (!input || !valEl) continue;
+        let v;
+        if (row.sceneKey) v = scene3d[row.sceneKey];
+        else v = flowTune[row.flowKey];
+        input.value = String(row.format === "int" ? Math.round(/** @type {number} */ (v)) : v);
+        valEl.textContent = formatStrandTuneVal(row);
+      }
     };
 
     const onTune = () => {
-      flowTune.arcJitter        = clamp(Number(refs.jitter.value) || 0, 0, 20);
-      flowTune.arcInconsistency = clamp(Number(refs.inconsistency.value) || 0, 0, 20);
-      flowTune.strandSpread     = clamp(Number(refs.spread.value) || 1, 0, 20);
-      flowTune.strandInstances  = clamp(Number(refs.instances.value) || 1, 0, 20);
-      flowTune.orbSpeed         = clamp(Number(refs.orbSpeed.value) || 0, 0, 20);
-      flowTune.orbGlowDistance  = clamp(Number(refs.orbGlow.value) || 0, 0, 20);
-      flowTune.bendFillet       = clamp(Number(refs.bendFillet.value) || 0, 0, 20);
-      flowTune.bendQuantity     = clamp(Number(refs.bendQty.value) || 2, 1, 3);
-      scene3d.depth       = clamp(Number(refs.depth.value) || 1, 0, 20);
-      scene3d.perspective = clamp(Number(refs.perspective.value) || 1, 0, 20);
-      scene3d.spinSpeed   = clamp(Number(refs.spinSpeed.value) || 0, 0, 20);
+      for (const row of modalRows) {
+        const el = tuneInput(row);
+        if (!el) continue;
+        const n = Number(el.value);
+        if (row.sceneKey === "depth") scene3d.depth = clamp(n || 1, 0, 20);
+        else if (row.sceneKey === "perspective") scene3d.perspective = clamp(n || 1, 0, 20);
+        else if (row.sceneKey === "spinSpeed") scene3d.spinSpeed = clamp(n || 0, 0, 20);
+        else if (row.flowKey === "arcJitter") flowTune.arcJitter = clamp(n || 0, 0, 20);
+        else if (row.flowKey === "arcInconsistency") flowTune.arcInconsistency = clamp(n || 0, 0, 20);
+        else if (row.flowKey === "strandSpread") flowTune.strandSpread = clamp(n || 1, 0, 20);
+        else if (row.flowKey === "strandInstances") {
+          flowTune.strandInstances = IS_FIELD ? 1 : clamp(n || 1, 0, 20);
+        } else if (row.flowKey === "orbSpeed") flowTune.orbSpeed = clamp(n || 0, 0, 20);
+        else if (row.flowKey === "orbGlowDistance") flowTune.orbGlowDistance = clamp(n || 0, 0, 20);
+        else if (row.flowKey === "bendFillet") flowTune.bendFillet = clamp(n || 0, 0, 40);
+        else if (row.flowKey === "bendQuantity") flowTune.bendQuantity = clamp(Math.round(n) || 2, 1, 8);
+        else if (row.flowKey === "fieldHighwayStrands") {
+          flowTune.fieldHighwayStrands = clamp(Math.round(n) || 8, 1, 8);
+        } else if (row.flowKey === "tweenQty") flowTune.tweenQty = clamp(n || 0, 0, 20);
+        else if (row.flowKey === "tweenJitter") flowTune.tweenJitter = clamp(n || 0, 0, 20);
+        else if (row.flowKey === "tweenOffset") flowTune.tweenOffset = clamp(n || 10, 0, 20);
+      }
+      if (IS_FIELD) flowTune.strandInstances = 1;
       syncUi();
       saveFlowTune();
       const running = render();
       if (running || scene3d.autoSpin) scheduleAnimationFrame();
     };
 
-    refs.jitter.addEventListener("input", onTune);
-    refs.inconsistency.addEventListener("input", onTune);
-    refs.spread.addEventListener("input", onTune);
-    refs.instances.addEventListener("input", onTune);
-    refs.orbSpeed.addEventListener("input", onTune);
-    refs.orbGlow.addEventListener("input", onTune);
-    refs.bendFillet.addEventListener("input", onTune);
-    refs.bendQty.addEventListener("input", onTune);
-    refs.depth.addEventListener("input", onTune);
-    refs.perspective.addEventListener("input", onTune);
-    refs.spinSpeed.addEventListener("input", onTune);
-    refs.reset.addEventListener("click", () => {
-      flowTune.arcJitter = 0.45;
-      flowTune.arcInconsistency = 0.52;
-      flowTune.strandSpread = 1.35;
-      flowTune.strandInstances = 1.45;
-      flowTune.orbSpeed = 7.0;
-      flowTune.orbGlowDistance = 6.0;
-      flowTune.bendFillet = 8.0;
-      flowTune.bendQuantity = 2.0;
-      scene3d.depth = 1.0;
-      scene3d.perspective = 0.9;
-      scene3d.spinSpeed = 0.35;
-      onTune();
+    for (const row of modalRows) {
+      const el = tuneInput(row);
+      el?.addEventListener("input", onTune);
+    }
+
+    const resetBtn = /** @type {HTMLButtonElement} */ (modal.querySelector("#flow-reset"));
+    resetBtn.addEventListener("click", () => {
+      R.applyFlowTuneReset(IS_FIELD, flowTune, scene3d);
+      syncUi();
+      saveFlowTune();
+      const running = render();
+      if (running || scene3d.autoSpin) scheduleAnimationFrame();
     });
 
     btn.addEventListener("click", () => { modal.hidden = !modal.hidden; });
     syncUi();
+    flowTuneSyncUi = syncUi;
   }
 
   /* ═══════════════════════════════════════════════════════
    * UI WIRING
    * ═══════════════════════════════════════════════════════ */
+  function applyChromeAfterFlowLoad() {
+    const spinBtn = document.getElementById("btn-spin");
+    if (spinBtn) spinBtn.classList.toggle("is-active", scene3d.autoSpin);
+    const labelsBtn = document.getElementById("btn-labels");
+    if (labelsBtn) labelsBtn.classList.toggle("is-active", showNodeLabels);
+  }
+
   function wireUi() {
+    applyChromeAfterFlowLoad();
     const spinBtn = document.getElementById("btn-spin");
     if (spinBtn) {
-      spinBtn.classList.toggle("is-active", scene3d.autoSpin);
       spinBtn.addEventListener("click", () => {
         scene3d.autoSpin = !scene3d.autoSpin;
         spinBtn.classList.toggle("is-active", scene3d.autoSpin);
@@ -1795,15 +2272,16 @@
     }
     const labelsBtn = document.getElementById("btn-labels");
     if (labelsBtn) {
-      labelsBtn.classList.toggle("is-active", showNodeLabels);
       labelsBtn.addEventListener("click", () => {
         showNodeLabels = !showNodeLabels;
         labelsBtn.classList.toggle("is-active", showNodeLabels);
+        saveFlowTune();
         render();
       });
     }
     document.getElementById("btn-regen")?.addEventListener("click", () => {
       genSeed = (Math.random() * 0xffffffff) >>> 0;
+      if (IS_FIELD && window.GenerativeFieldBg) window.GenerativeFieldBg.randomizeField();
       render();
     });
     document.getElementById("btn-sync")?.addEventListener("click", () => {
@@ -1829,6 +2307,43 @@
   });
   window.addEventListener("storage", e => {
     if (e.key === GENERATIVE_PIPE_KEY) syncFromPipe();
+    if (e.key === FLOW_TUNE_KEY && e.newValue) {
+      loadFlowTune();
+      applyChromeAfterFlowLoad();
+      flowTuneSyncUi();
+      const running = render();
+      if (running || scene3d.autoSpin) scheduleAnimationFrame();
+    }
   });
   window.setInterval(syncFromPipe, 1200);
+
+  if (IS_EMBED) {
+    const embedStyle = document.createElement("style");
+    embedStyle.textContent = `
+      .generative-embed .chrome,
+      .generative-embed .scenario-strip { display: none !important; }
+      .generative-embed .flow-tune-toggle,
+      .generative-embed .flow-tune-modal { display: none !important; }
+    `;
+    document.head.appendChild(embedStyle);
+    document.documentElement.classList.add("generative-embed");
+
+    window.addEventListener("message", e => {
+      if (e.source !== window.parent) return;
+      const d = e.data;
+      if (!d || d.type !== "generative-contact") return;
+      if (d.action === "click" && d.id) {
+        document.getElementById(d.id)?.click();
+        return;
+      }
+      if (d.action === "scenario" && d.routeId) {
+        const rid = String(d.routeId);
+        const esc =
+          typeof CSS !== "undefined" && CSS.escape
+            ? CSS.escape(rid)
+            : rid.replace(/"/g, '\\"');
+        document.querySelector(`.scenario-btn[data-route-id="${esc}"]`)?.click();
+      }
+    });
+  }
 })();
