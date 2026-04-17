@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lyra · zones (dataviz) · Pulse</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="canvas-chrome.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: rgb(7, 24, 45);
+        overflow: hidden;
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+        color: rgba(255, 255, 255, 0.94);
+      }
+
+      .viewport-12x5 > svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      /* ─── Zones (ultra-subtle frames) ─── */
+      .zone-frame {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.09);
+        stroke-width: 0.05;
+      }
+      .zone-label {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 1.25px;
+        font-weight: 400;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        fill: rgba(255, 255, 255, 0.7);
+      }
+      .zone-sub {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.65px;
+        font-weight: 400;
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+        fill: rgba(255, 255, 255, 0.3);
+      }
+
+      /* ─── Dividers (FW / IPS) ─── */
+      .divider-line {
+        stroke: rgba(255, 255, 255, 0.2);
+        stroke-width: 0.05;
+        stroke-dasharray: 0.4 0.4;
+      }
+      .divider-badge {
+        fill: rgba(7, 24, 45, 0.96);
+        stroke: rgba(255, 255, 255, 0.5);
+        stroke-width: 0.06;
+      }
+      .divider-text {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.85px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        fill: rgba(255, 255, 255, 0.94);
+        text-anchor: middle;
+      }
+      .divider-sub {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.52px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        fill: rgba(255, 255, 255, 0.45);
+        text-anchor: middle;
+      }
+
+      /* ─── Edges ─── */
+      .edge {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.42);
+        stroke-width: 0.05;
+        stroke-linecap: round;
+        pointer-events: none;
+      }
+      .edge-dashed {
+        stroke: rgba(255, 255, 255, 0.48);
+        stroke-dasharray: 0.42 0.34;
+      }
+      .edge:hover {
+        stroke: rgba(255, 255, 255, 0.72);
+      }
+      .edge-hit {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0);
+        stroke-width: 1.2;
+        stroke-linecap: round;
+        pointer-events: stroke;
+        cursor: pointer;
+      }
+
+      /* ─── Nodes ─── */
+      .node-dot {
+        fill: #fff;
+      }
+      .node-halo {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.14);
+        stroke-width: 0.08;
+      }
+      .node-tick {
+        stroke: rgba(255, 255, 255, 0.22);
+        stroke-width: 0.05;
+        stroke-linecap: round;
+        pointer-events: none;
+      }
+      .node-label {
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+        font-size: 1.15px;
+        font-weight: 400;
+        fill: rgba(255, 255, 255, 0.96);
+        letter-spacing: 0.015em;
+        cursor: text;
+      }
+      .node-kind {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.55px;
+        font-weight: 400;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        fill: rgba(255, 255, 255, 0.42);
+        cursor: text;
+      }
+      .node {
+        cursor: grab;
+      }
+      .node.is-dragging {
+        cursor: grabbing;
+      }
+      .node.is-dragging .node-halo {
+        stroke: rgba(255, 255, 255, 0.55);
+      }
+      .node.is-selected .node-halo {
+        stroke: rgba(255, 255, 255, 0.9);
+      }
+      .node.is-delete-target .node-halo {
+        stroke: rgba(255, 120, 120, 0.95);
+      }
+      .node.is-seq-draft .node-halo {
+        stroke: rgba(128, 214, 255, 0.95);
+      }
+      .node.is-seq-active .node-halo {
+        stroke: url(#node-seq-stroke-grad);
+        stroke-width: 0.22;
+        filter: url(#node-seq-glow);
+      }
+      .node.is-seq-active .node-dot,
+      .node.is-seq-active .node-core {
+        fill: url(#node-seq-core-grad);
+        filter: url(#node-seq-glow);
+      }
+
+      /* ─── Inline editor ─── */
+      .edit-input {
+        position: fixed;
+        z-index: 20;
+        background: rgba(7, 24, 45, 0.96);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.45);
+        border-radius: 2px;
+        padding: 4px 6px;
+        font: 400 13px "IBM Plex Sans", system-ui, sans-serif;
+        letter-spacing: 0.01em;
+        outline: none;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+      }
+      .edit-input.is-kind {
+        font: 400 10px "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+      .edit-input:focus {
+        border-color: rgba(255, 255, 255, 0.85);
+      }
+
+      /* ─── Title / help plate ─── */
+      .title-plate {
+        position: fixed;
+        left: 16px;
+        top: 14px;
+        z-index: 3;
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.55);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        pointer-events: none;
+      }
+      .title-plate strong {
+        color: #fff;
+        font-weight: 500;
+      }
+      .title-plate .tag {
+        padding: 2px 6px;
+        border: 1px solid rgba(255, 255, 255, 0.38);
+        border-radius: 2px;
+        color: rgba(255, 255, 255, 0.82);
+      }
+      .title-plate .hint {
+        color: rgba(255, 255, 255, 0.35);
+        text-transform: none;
+        letter-spacing: 0.04em;
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+        font-size: 11px;
+      }
+
+      /* ─── Toast (copy feedback) ─── */
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 72px;
+        transform: translateX(-50%);
+        z-index: 30;
+        padding: 8px 14px;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        background: rgba(7, 24, 45, 0.94);
+        color: rgba(255, 255, 255, 0.92);
+        font: 500 11px "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        border-radius: 2px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        pointer-events: none;
+      }
+      .toast.is-visible {
+        opacity: 1;
+      }
+
+      /* ─── Context menu ─── */
+      .ctx-menu {
+        position: fixed;
+        z-index: 40;
+        min-width: 170px;
+        padding: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 4px;
+        background: rgba(7, 24, 45, 0.98);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      }
+      .ctx-menu[hidden] {
+        display: none;
+      }
+      .ctx-menu__item {
+        display: block;
+        width: 100%;
+        border: 1px solid transparent;
+        border-radius: 2px;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.9);
+        text-align: left;
+        padding: 8px 10px;
+        font: 400 11px "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+      .ctx-menu__item:hover {
+        border-color: rgba(255, 255, 255, 0.26);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      /* ─── Sequence controls ─── */
+      .seq-chip-row {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: 62px;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .seq-chip {
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        background: rgba(7, 24, 45, 0.8);
+        color: rgba(255, 255, 255, 0.82);
+        padding: 4px 8px;
+        font: 500 10px "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .seq-chip.is-active {
+        border-color: rgba(255, 255, 255, 0.75);
+        color: #fff;
+      }
+      .seq-tuner {
+        position: fixed;
+        right: 14px;
+        bottom: 62px;
+        z-index: 8;
+        width: min(290px, 86vw);
+        padding: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.26);
+        border-radius: 4px;
+        background: rgba(7, 24, 45, 0.96);
+        color: rgba(255, 255, 255, 0.9);
+      }
+      .seq-tuner[hidden] {
+        display: none;
+      }
+      .seq-tuner__title {
+        margin: 0 0 8px;
+        font: 500 10px "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .seq-tuner__row {
+        margin: 7px 0;
+      }
+      .seq-tuner__row label {
+        display: flex;
+        justify-content: space-between;
+        font: 400 10px "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.72);
+      }
+      .seq-tuner__row input[type="range"] {
+        width: 100%;
+        accent-color: rgba(255, 255, 255, 0.95);
+      }
+    </style>
+  </head>
+  <body data-pulse-page="lyra">
+    <div class="title-plate">
+      <strong>Lyra</strong> · dataviz
+      <span class="tag">BRANCH</span>
+      <span class="hint">drag to move · double-click label to edit</span>
+    </div>
+
+    <div class="viewport-stage">
+      <div class="viewport-12x5">
+        <svg
+          id="viz"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 120 50"
+          preserveAspectRatio="xMidYMid meet"
+          aria-label="Lyra — 3-zone logical topology (External · AI · Backend / Data Center)"
+        >
+          <defs>
+            <radialGradient id="orb-halo-grad" cx="46%" cy="42%" r="66%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.96" />
+              <stop offset="28%" stop-color="#9be8ff" stop-opacity="0.9" />
+              <stop offset="58%" stop-color="#67d3ff" stop-opacity="0.58" />
+              <stop offset="84%" stop-color="#7f8bff" stop-opacity="0.22" />
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="orb-core-grad" cx="42%" cy="40%" r="62%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
+              <stop offset="45%" stop-color="#e8f8ff" stop-opacity="0.98" />
+              <stop offset="100%" stop-color="#8fdcff" stop-opacity="0.92" />
+            </radialGradient>
+            <radialGradient id="node-seq-core-grad" cx="42%" cy="40%" r="66%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
+              <stop offset="52%" stop-color="#d9f6ff" stop-opacity="0.98" />
+              <stop offset="100%" stop-color="#7ed9ff" stop-opacity="0.95" />
+            </radialGradient>
+            <linearGradient id="node-seq-stroke-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#b4f2ff" stop-opacity="1" />
+              <stop offset="55%" stop-color="#80e1ff" stop-opacity="0.95" />
+              <stop offset="100%" stop-color="#d3b6ff" stop-opacity="0.92" />
+            </linearGradient>
+            <filter id="orb-glow" x="-300%" y="-300%" width="700%" height="700%">
+              <feGaussianBlur stdDeviation="1.7" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="node-seq-glow" x="-280%" y="-280%" width="640%" height="640%">
+              <feGaussianBlur stdDeviation="1.25" result="nb" />
+              <feMerge>
+                <feMergeNode in="nb" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <g id="layer-zones"></g>
+          <g id="layer-dividers"></g>
+          <g id="layer-edges"></g>
+          <g id="layer-nodes"></g>
+          <g id="layer-sequence"></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="chrome" role="toolbar" aria-label="Lyra controls">
+      <button type="button" id="btn-connect" class="is-active">Connect: On</button>
+      <button type="button" id="btn-seq-record">Seq record: Off</button>
+      <button type="button" id="btn-seq-save">Save sequence</button>
+      <button type="button" id="btn-seq-tuner">Sequence tuner</button>
+      <button type="button" id="btn-clear-edges">Clear strands</button>
+      <button type="button" id="btn-copy">Copy data</button>
+      <button type="button" id="btn-reset">Reset</button>
+      <nav class="chrome-nav" aria-label="Pulse canvas views">
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="orion" href="orion.html">Orion · classic</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="eridanus" href="eridanus.html">Eridanus · field</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="andromeda" href="andromeda.html">Andromeda · gradient</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="reticulum" href="reticulum.html">Reticulum · fabric</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="perseus" href="perseus.html">Perseus · generative</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="coma-berenices" href="coma-berenices.html">Coma Berenices · grid</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="ophiuchus" href="ophiuchus.html">Ophiuchus · topology</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="lyra" href="lyra.html">Lyra · zones</a>
+      </nav>
+    </div>
+
+    <div id="toast" class="toast">Copied</div>
+    <div id="ctx-menu" class="ctx-menu" hidden></div>
+    <div id="seq-chip-row" class="seq-chip-row"></div>
+    <aside id="seq-tuner" class="seq-tuner" hidden>
+      <h3 class="seq-tuner__title">Sequence Tuner</h3>
+      <div class="seq-tuner__row">
+        <label>Travel speed <span id="seq-speed-val"></span></label>
+        <input id="seq-speed" type="range" min="6" max="60" step="1" value="24" />
+      </div>
+      <div class="seq-tuner__row">
+        <label>Path ease <span id="seq-ease-val"></span></label>
+        <input id="seq-ease" type="range" min="0" max="1" step="0.05" value="0.35" />
+      </div>
+      <div class="seq-tuner__row">
+        <label>Glow size <span id="seq-glow-val"></span></label>
+        <input id="seq-glow" type="range" min="0.2" max="2.2" step="0.05" value="1.0" />
+      </div>
+      <div class="seq-tuner__row">
+        <label>Glow intensity <span id="seq-intensity-val"></span></label>
+        <input id="seq-intensity" type="range" min="0.2" max="1.6" step="0.05" value="0.9" />
+      </div>
+    </aside>
+
+    <script>
+      /*
+       * Lyra — dataviz pass
+       *   • White dots + thin white strands
+       *   • Editorial labels (IBM Plex Sans / Mono)
+       *   • Drag nodes · double-click label (or kind) to rename
+       *   • Connect mode: click node A then node B to create a strand
+       *   • Click a strand to toggle solid/dashed
+       *   • Add node mode: click empty canvas to place a node
+       *   • Delete node mode: click node to remove (and detach strands)
+       *   • "Copy data" → clipboard JSON of current NODES+EDGES so you can paste
+       *     edits back into this file
+       *
+       * All geometry in a 120 × 50 viewBox.
+       */
+
+      // ─── Zones (ambient frames + labels) ───────────────────────────
+      const ZONES = [
+        {
+          id: "external",
+          label: "External",
+          sublabel: "Users · Partners · Internet",
+          x: 2,
+          y: 3,
+          w: 34,
+          h: 44,
+        },
+        {
+          id: "ai",
+          label: "AI",
+          sublabel: "Inference · agents · model edge",
+          x: 44,
+          y: 3,
+          w: 32,
+          h: 44,
+        },
+        {
+          id: "backend",
+          label: "Backend / Data Center",
+          sublabel: "Apps · data · telemetry",
+          x: 84,
+          y: 3,
+          w: 34,
+          h: 44,
+        },
+      ];
+
+      // ─── Dividers (FW between External↔AI · IPS between AI↔Backend) ─
+      const DIVIDERS = [
+        { id: "fw", label: "FW", sub: "Firewall", x: 40 },
+        { id: "ips", label: "IPS", sub: "Intrusion prev.", x: 80 },
+      ];
+
+      // ─── Nodes ──────────────────────────────────────────────────────
+      // lp = label position: 'left' | 'right' | 'top' | 'bottom'
+      const INITIAL_NODES = [
+        // External zone
+        { id: "external-user", label: "External User", kind: "User · entry", zone: "external", x: 10, y: 14, lp: "right" },
+        { id: "entry-point",   label: "Entry Point",   kind: "Edge / DNS",   zone: "external", x: 10, y: 26, lp: "right" },
+        { id: "ext-lb",        label: "Load Balancer", kind: "External LB",  zone: "external", x: 29, y: 20, lp: "left" },
+        { id: "fw-node",       label: "FW",            kind: "Firewall",      zone: "external", x: 40, y: 25, lp: "bottom" },
+
+        // AI zone
+        { id: "adc",           label: "ADC",            kind: "App delivery",       zone: "ai", x: 52, y: 14, lp: "right" },
+        { id: "ai-switch",     label: "Smart Switch",   kind: "L2/L3 · telemetry",  zone: "ai", x: 60, y: 26, lp: "right" },
+        { id: "ai-app",        label: "AI App Server",  kind: "Inference · agent",  zone: "ai", x: 60, y: 38, lp: "right" },
+        { id: "ips-node",      label: "IPS",            kind: "Intrusion prev.",     zone: "ai", x: 80, y: 25, lp: "bottom" },
+
+        // Backend / Data Center
+        { id: "dc-app",        label: "App Server",     kind: "Service tier",       zone: "backend", x: 93, y: 14, lp: "right" },
+        { id: "dc-db",         label: "Datastore / DB", kind: "System of record",   zone: "backend", x: 93, y: 26, lp: "right" },
+        { id: "dc-switch",     label: "Smart Switch",   kind: "L2/L3 · ToR",        zone: "backend", x: 110, y: 22, lp: "left" },
+        { id: "splunk",        label: "Splunk",         kind: "ES · SOAR · index",  zone: "backend", x: 102, y: 38, lp: "top" },
+      ];
+
+      // ─── Edges ──────────────────────────────────────────────────────
+      // start with no strands; click nodes in Connect mode to add
+      // kind: 'solid' | 'dashed'
+      const INITIAL_EDGES = [];
+
+      // Live working copies (drag / edit mutate these)
+      let NODES = INITIAL_NODES.map((n) => ({ ...n }));
+      let EDGES = INITIAL_EDGES.map((e) => ({ ...e }));
+      let nodeIndex = new Map(NODES.map((n) => [n.id, n]));
+      let connectMode = true;
+      let addNodeMode = false;
+      let deleteNodeMode = false;
+      let connectFromId = null;
+      let nodeCounter = NODES.length;
+      let seqRecordMode = false;
+      let seqDraft = [];
+      let sequences = [];
+      let sequenceCounter = 0;
+      let activeSequenceId = null;
+      let playback = null;
+      const sequenceSettings = {
+        speed: 24,
+        /** 0 = linear along strand, 1 = full cubic ease-in-out */
+        ease: 0.35,
+        glow: 1,
+        intensity: 0.9,
+      };
+      const NODE_BEAT_MS = 220;
+      const STORAGE_KEY = "pulse.lyra.topology.v1";
+
+      /** 0→1 smooth: slow leave / slow arrive (cubic ease-in-out along each strand) */
+      function easeInOutCubic(t) {
+        const x = Math.min(1, Math.max(0, t));
+        return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+      }
+
+      /** Blend linear (0) and full cubic ease (1). amount in [0,1]. */
+      function blendPathEase(uLinear, amount) {
+        const a = Math.min(1, Math.max(0, amount));
+        if (a <= 0) return uLinear;
+        const uCubic = easeInOutCubic(uLinear);
+        return uLinear + (uCubic - uLinear) * a;
+      }
+
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const svg = document.getElementById("viz");
+      const layerZones = document.getElementById("layer-zones");
+      const layerDividers = document.getElementById("layer-dividers");
+      const layerEdges = document.getElementById("layer-edges");
+      const layerNodes = document.getElementById("layer-nodes");
+      const layerSequence = document.getElementById("layer-sequence");
+
+      function el(name, attrs = {}, parent) {
+        const node = document.createElementNS(SVG_NS, name);
+        for (const [k, v] of Object.entries(attrs)) {
+          if (v !== undefined && v !== null) node.setAttribute(k, String(v));
+        }
+        if (parent) parent.appendChild(node);
+        return node;
+      }
+      function setText(node, str) {
+        node.textContent = str;
+      }
+
+      function persistState() {
+        try {
+          const payload = {
+            nodes: NODES.map(({ id, label, kind, zone, x, y, lp }) => ({
+              id,
+              label,
+              kind,
+              zone,
+              x,
+              y,
+              lp,
+            })),
+            edges: EDGES.map(({ from, to, kind, crosses }) => ({
+              from,
+              to,
+              kind,
+              ...(crosses ? { crosses } : {}),
+            })),
+            sequences: sequences.map((s) => ({ id: s.id, nodes: [...s.nodes] })),
+            sequenceCounter,
+            settings: { ...sequenceSettings },
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        } catch (_) {
+          // Ignore storage failures (private mode/quota/etc).
+        }
+      }
+
+      function loadPersistedState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return false;
+          const data = JSON.parse(raw);
+          if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+            return false;
+          }
+
+          NODES = data.nodes.map((n) => ({
+            id: String(n.id || ""),
+            label: String(n.label || ""),
+            kind: String(n.kind || ""),
+            zone: String(n.zone || "external"),
+            x: Number.isFinite(n.x) ? n.x : 10,
+            y: Number.isFinite(n.y) ? n.y : 10,
+            lp: ["left", "right", "top", "bottom"].includes(n.lp) ? n.lp : "right",
+          }));
+          EDGES = data.edges
+            .filter((e) => e && e.from && e.to)
+            .map((e) => ({
+              from: String(e.from),
+              to: String(e.to),
+              kind: e.kind === "dashed" ? "dashed" : "solid",
+              ...(e.crosses ? { crosses: String(e.crosses) } : {}),
+            }));
+          sequences = Array.isArray(data.sequences)
+            ? data.sequences
+                .filter((s) => s && s.id && Array.isArray(s.nodes))
+                .map((s) => ({ id: String(s.id), nodes: s.nodes.map(String) }))
+                .filter((s) => s.nodes.length >= 2)
+            : [];
+          sequenceCounter = Number.isFinite(data.sequenceCounter)
+            ? Number(data.sequenceCounter)
+            : sequences.length;
+          if (data.settings) {
+            if (Number.isFinite(data.settings.speed)) sequenceSettings.speed = data.settings.speed;
+            if (Number.isFinite(data.settings.ease))
+              sequenceSettings.ease = Math.min(1, Math.max(0, data.settings.ease));
+            if (Number.isFinite(data.settings.glow)) sequenceSettings.glow = data.settings.glow;
+            if (Number.isFinite(data.settings.intensity))
+              sequenceSettings.intensity = data.settings.intensity;
+          }
+
+          nodeIndex = new Map(NODES.map((n) => [n.id, n]));
+          const maxGeneratedId = NODES.reduce((max, n) => {
+            const m = /^node-(\d+)$/.exec(n.id);
+            return m ? Math.max(max, Number(m[1])) : max;
+          }, 0);
+          nodeCounter = Math.max(NODES.length, maxGeneratedId);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      // ─── Zones ─────────────────────────────────────────────────────
+      function renderZones() {
+        layerZones.replaceChildren();
+        ZONES.forEach((z) => {
+          el(
+            "rect",
+            {
+              x: z.x,
+              y: z.y,
+              width: z.w,
+              height: z.h,
+              rx: 0.8,
+              ry: 0.8,
+              class: "zone-frame",
+            },
+            layerZones,
+          );
+          const lt = el(
+            "text",
+            { x: z.x + 1.4, y: z.y + 2.4, class: "zone-label" },
+            layerZones,
+          );
+          setText(lt, z.label);
+          const ls = el(
+            "text",
+            { x: z.x + 1.4, y: z.y + 3.8, class: "zone-sub" },
+            layerZones,
+          );
+          setText(ls, z.sublabel);
+        });
+      }
+
+      // ─── Dividers ──────────────────────────────────────────────────
+      function renderDividers() {
+        layerDividers.replaceChildren();
+        DIVIDERS.forEach((d) => {
+          el(
+            "line",
+            {
+              x1: d.x,
+              x2: d.x,
+              y1: 5,
+              y2: 45,
+              class: "divider-line",
+            },
+            layerDividers,
+          );
+          const by = 25 - 2.6;
+          const bw = 6;
+          const bh = 5.2;
+          el(
+            "rect",
+            {
+              x: d.x - bw / 2,
+              y: by,
+              width: bw,
+              height: bh,
+              rx: 0.5,
+              ry: 0.5,
+              class: "divider-badge",
+            },
+            layerDividers,
+          );
+          const t = el(
+            "text",
+            { x: d.x, y: by + 2.2, class: "divider-text" },
+            layerDividers,
+          );
+          setText(t, d.label);
+          const s = el(
+            "text",
+            { x: d.x, y: by + 3.8, class: "divider-sub" },
+            layerDividers,
+          );
+          setText(s, d.sub);
+        });
+      }
+
+      // ─── Edge geometry ─────────────────────────────────────────────
+      const DOT_R = 0.55; // white dot radius
+      const EDGE_GAP = 1.1; // where edges attach (just outside the halo)
+      function edgeAnchor(n, toward) {
+        const dx = toward.x - n.x,
+          dy = toward.y - n.y;
+        const L = Math.hypot(dx, dy) || 1;
+        return { x: n.x + (dx / L) * EDGE_GAP, y: n.y + (dy / L) * EDGE_GAP };
+      }
+      function edgePath(a, b, crosses) {
+        const pa = edgeAnchor(a, b);
+        const pb = edgeAnchor(b, a);
+        if (crosses) {
+          // Arc the strand over the FW/IPS rail
+          const mx = (pa.x + pb.x) / 2;
+          const my = Math.min(pa.y, pb.y) - 3;
+          return `M ${pa.x} ${pa.y} Q ${mx} ${my} ${pb.x} ${pb.y}`;
+        }
+        // Otherwise, a lightly-bowed cubic for a "strand" feel
+        const dx = pb.x - pa.x,
+          dy = pb.y - pa.y;
+        const L = Math.hypot(dx, dy) || 1;
+        // Perpendicular offset scaled to length (subtle)
+        const bow = Math.min(1.1, L * 0.04);
+        const nx = -dy / L,
+          ny = dx / L;
+        const c1 = {
+          x: pa.x + dx * 0.33 + nx * bow,
+          y: pa.y + dy * 0.33 + ny * bow,
+        };
+        const c2 = {
+          x: pa.x + dx * 0.66 + nx * bow,
+          y: pa.y + dy * 0.66 + ny * bow,
+        };
+        return `M ${pa.x} ${pa.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${pb.x} ${pb.y}`;
+      }
+
+      const edgeEls = [];
+      function edgeKey(a, b) {
+        return [a, b].sort().join("::");
+      }
+      function inferCrosses(a, b) {
+        const midX = (a.x + b.x) / 2;
+        const fw = DIVIDERS.find((d) => d.id === "fw");
+        const ips = DIVIDERS.find((d) => d.id === "ips");
+        if (fw && Math.min(a.x, b.x) < fw.x && Math.max(a.x, b.x) > fw.x) return "fw";
+        if (ips && Math.min(a.x, b.x) < ips.x && Math.max(a.x, b.x) > ips.x) return "ips";
+        if (fw && Math.abs(midX - fw.x) < 0.1) return "fw";
+        if (ips && Math.abs(midX - ips.x) < 0.1) return "ips";
+        return undefined;
+      }
+      function clearSelection() {
+        connectFromId = null;
+        nodeEls.forEach((g) => {
+          g.classList.remove("is-selected");
+          g.classList.remove("is-delete-target");
+        });
+      }
+      function setSelectedNode(id) {
+        clearSelection();
+        connectFromId = id;
+        const g = nodeEls.get(id);
+        if (g) g.classList.add("is-selected");
+      }
+      function findEdgeIndex(a, b) {
+        const k = edgeKey(a, b);
+        return EDGES.findIndex((e) => edgeKey(e.from, e.to) === k);
+      }
+      function toggleEdgeStyle(edgeObj) {
+        edgeObj.kind = edgeObj.kind === "dashed" ? "solid" : "dashed";
+      }
+      function renderEdges() {
+        layerEdges.replaceChildren();
+        edgeEls.length = 0;
+        EDGES.forEach((e) => {
+          const a = nodeIndex.get(e.from),
+            b = nodeIndex.get(e.to);
+          if (!a || !b) return;
+          const cls = "edge" + (e.kind === "dashed" ? " edge-dashed" : "");
+          const d = edgePath(a, b, e.crosses);
+          const p = el(
+            "path",
+            { d, class: cls },
+            layerEdges,
+          );
+          const hit = el(
+            "path",
+            { d, class: "edge-hit", "data-edge-key": edgeKey(e.from, e.to) },
+            layerEdges,
+          );
+          hit.addEventListener("click", (evt) => {
+            evt.stopPropagation();
+            toggleEdgeStyle(e);
+            renderEdges();
+            persistState();
+          });
+          hit.addEventListener("contextmenu", (evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            showContextMenu(evt.clientX, evt.clientY, [
+              {
+                label: e.kind === "dashed" ? "Set solid" : "Set dashed",
+                onClick: () => {
+                  toggleEdgeStyle(e);
+                  renderEdges();
+                  persistState();
+                },
+              },
+              {
+                label: "Delete strand",
+                onClick: () => {
+                  const idx = findEdgeIndex(e.from, e.to);
+                  if (idx >= 0) {
+                    EDGES.splice(idx, 1);
+                    renderEdges();
+                    persistState();
+                  }
+                },
+              },
+            ]);
+          });
+          edgeEls.push({ e, el: p });
+        });
+      }
+      function updateEdgesFor(id) {
+        edgeEls.forEach(({ e, el: p }) => {
+          if (e.from === id || e.to === id) {
+            const a = nodeIndex.get(e.from),
+              b = nodeIndex.get(e.to);
+            const d = edgePath(a, b, e.crosses);
+            p.setAttribute("d", d);
+            const hit = p.nextSibling;
+            if (hit && hit.classList && hit.classList.contains("edge-hit")) {
+              hit.setAttribute("d", d);
+            }
+          }
+        });
+      }
+
+      // ─── Label geometry ────────────────────────────────────────────
+      function labelOffsets(lp) {
+        // label + kind placement + tick line relative to dot at (0,0)
+        const GAP = 1.2; // from dot edge to label
+        const TICK_A = 0.8;
+        const TICK_B = 1.9;
+        switch (lp) {
+          case "left":
+            return {
+              lbl: { x: -(GAP + 1), y: 0.35, anchor: "end" },
+              kind: { x: -(GAP + 1), y: -0.95, anchor: "end" },
+              tick: { x1: -TICK_A, y1: 0, x2: -TICK_B, y2: 0 },
+            };
+          case "top":
+            return {
+              lbl: { x: 0, y: -(GAP + 0.9), anchor: "middle" },
+              kind: { x: 0, y: -(GAP + 2.2), anchor: "middle" },
+              tick: { x1: 0, y1: -TICK_A, x2: 0, y2: -TICK_B },
+            };
+          case "bottom":
+            return {
+              lbl: { x: 0, y: GAP + 1.3, anchor: "middle" },
+              kind: { x: 0, y: GAP + 2.5, anchor: "middle" },
+              tick: { x1: 0, y1: TICK_A, x2: 0, y2: TICK_B },
+            };
+          case "right":
+          default:
+            return {
+              lbl: { x: GAP + 1, y: 0.35, anchor: "start" },
+              kind: { x: GAP + 1, y: -0.95, anchor: "start" },
+              tick: { x1: TICK_A, y1: 0, x2: TICK_B, y2: 0 },
+            };
+        }
+      }
+
+      // ─── Nodes ─────────────────────────────────────────────────────
+      const nodeEls = new Map();
+      function renderNodes() {
+        layerNodes.replaceChildren();
+        nodeEls.clear();
+        NODES.forEach((n) => {
+          const g = el(
+            "g",
+            {
+              class: "node",
+              "data-id": n.id,
+              transform: `translate(${n.x} ${n.y})`,
+            },
+            layerNodes,
+          );
+          // generous invisible hit area for easy grabbing
+          el(
+            "circle",
+            {
+              cx: 0,
+              cy: 0,
+              r: 2.2,
+              fill: "rgba(255,255,255,0)",
+              class: "node-hit",
+            },
+            g,
+          );
+          el("circle", { cx: 0, cy: 0, r: 1.3, class: "node-halo" }, g);
+          el("circle", { cx: 0, cy: 0, r: DOT_R, class: "node-dot node-core" }, g);
+
+          const off = labelOffsets(n.lp || "right");
+          el(
+            "line",
+            {
+              x1: off.tick.x1,
+              y1: off.tick.y1,
+              x2: off.tick.x2,
+              y2: off.tick.y2,
+              class: "node-tick",
+            },
+            g,
+          );
+          const lbl = el(
+            "text",
+            {
+              x: off.lbl.x,
+              y: off.lbl.y,
+              "text-anchor": off.lbl.anchor,
+              class: "node-label",
+              "data-role": "label",
+            },
+            g,
+          );
+          setText(lbl, n.label);
+          if (n.kind) {
+            const kind = el(
+              "text",
+              {
+                x: off.kind.x,
+                y: off.kind.y,
+                "text-anchor": off.kind.anchor,
+                class: "node-kind",
+                "data-role": "kind",
+              },
+              g,
+            );
+            setText(kind, n.kind);
+          }
+          nodeEls.set(n.id, g);
+        });
+        attachInteractions();
+      }
+
+      // ─── Interactions: drag + edit ─────────────────────────────────
+      function svgPoint(evt) {
+        const pt = svg.createSVGPoint();
+        pt.x = evt.clientX;
+        pt.y = evt.clientY;
+        return pt.matrixTransform(svg.getScreenCTM().inverse());
+      }
+
+      let drag = null;
+      function attachInteractions() {
+        nodeEls.forEach((g) => {
+          g.addEventListener("pointerdown", onPointerDown);
+          g.querySelectorAll("text[data-role]").forEach((t) => {
+            t.addEventListener("dblclick", onEditText);
+          });
+        });
+      }
+
+      function onPointerDown(evt) {
+        if (evt.button !== 0) return;
+        // let label/kind handle their own dblclick unless we are recording/connecting
+        if (
+          evt.target.tagName &&
+          evt.target.tagName.toLowerCase() === "text" &&
+          !seqRecordMode &&
+          !connectMode
+        )
+          return;
+        const g = evt.currentTarget;
+        const id = g.getAttribute("data-id");
+        if (deleteNodeMode) {
+          deleteNode(id);
+          evt.preventDefault();
+          return;
+        }
+        const n = nodeIndex.get(id);
+        const start = svgPoint(evt);
+        drag = {
+          id,
+          nx0: n.x,
+          ny0: n.y,
+          sx: start.x,
+          sy: start.y,
+          moved: false,
+        };
+        g.classList.add("is-dragging");
+        try {
+          g.setPointerCapture(evt.pointerId);
+        } catch (_) {}
+        evt.preventDefault();
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerUp, { once: true });
+      }
+
+      function onPointerMove(evt) {
+        if (!drag) return;
+        const p = svgPoint(evt);
+        const n = nodeIndex.get(drag.id);
+        const nx = drag.nx0 + (p.x - drag.sx);
+        const ny = drag.ny0 + (p.y - drag.sy);
+        if (Math.hypot(nx - drag.nx0, ny - drag.ny0) > 0.1) drag.moved = true;
+        // clamp to viewBox (leave a little margin for labels)
+        n.x = Math.max(1, Math.min(119, nx));
+        n.y = Math.max(1, Math.min(49, ny));
+        nodeEls
+          .get(drag.id)
+          .setAttribute("transform", `translate(${n.x} ${n.y})`);
+        updateEdgesFor(drag.id);
+      }
+
+      function onPointerUp() {
+        if (!drag) return;
+        const g = nodeEls.get(drag.id);
+        g.classList.remove("is-dragging");
+        if (drag.moved) {
+          persistState();
+        }
+        if (!drag.moved && (connectMode || seqRecordMode)) {
+          handleNodeConnectClick(drag.id);
+        }
+        window.removeEventListener("pointermove", onPointerMove);
+        drag = null;
+      }
+
+      function inferZoneForX(x) {
+        const zone = ZONES.find((z) => x >= z.x && x <= z.x + z.w);
+        return zone ? zone.id : "external";
+      }
+
+      function addNodeAt(x, y) {
+        nodeCounter += 1;
+        const id = `node-${nodeCounter}`;
+        const node = {
+          id,
+          label: `New Node ${nodeCounter}`,
+          kind: "Custom",
+          zone: inferZoneForX(x),
+          x: Math.max(1, Math.min(119, x)),
+          y: Math.max(1, Math.min(49, y)),
+          lp: "right",
+        };
+        NODES.push(node);
+        nodeIndex.set(node.id, node);
+        renderNodes();
+        renderSequenceChips();
+        persistState();
+        showToast("Node added");
+      }
+
+      function deleteNode(id) {
+        const idx = NODES.findIndex((n) => n.id === id);
+        if (idx < 0) return;
+        NODES.splice(idx, 1);
+        EDGES = EDGES.filter((e) => e.from !== id && e.to !== id);
+        nodeIndex = new Map(NODES.map((n) => [n.id, n]));
+        if (connectFromId === id) connectFromId = null;
+        seqDraft = seqDraft.filter((n) => n !== id);
+        sequences = sequences
+          .map((s) => ({ ...s, nodes: s.nodes.filter((n) => n !== id) }))
+          .filter((s) => s.nodes.length >= 2);
+        if (activeSequenceId && !sequences.some((s) => s.id === activeSequenceId)) {
+          activeSequenceId = null;
+        }
+        clearSelection();
+        renderEdges();
+        renderNodes();
+        renderSequenceChips();
+        persistState();
+        showToast("Node deleted");
+      }
+
+      function handleNodeConnectClick(id) {
+        if (seqRecordMode) {
+          handleSequenceNodePick(id);
+          return;
+        }
+        if (!connectFromId) {
+          setSelectedNode(id);
+          showToast("Select second node");
+          return;
+        }
+        if (connectFromId === id) {
+          clearSelection();
+          return;
+        }
+        const fromNode = nodeIndex.get(connectFromId);
+        const toNode = nodeIndex.get(id);
+        const existingIdx = findEdgeIndex(connectFromId, id);
+        if (existingIdx >= 0) {
+          EDGES.splice(existingIdx, 1);
+          showToast("Strand removed");
+        } else {
+          EDGES.push({
+            from: connectFromId,
+            to: id,
+            kind: "solid",
+            crosses: inferCrosses(fromNode, toNode),
+          });
+          showToast("Strand added");
+        }
+        clearSelection();
+        renderEdges();
+        persistState();
+      }
+
+      function handleSequenceNodePick(id) {
+        const last = seqDraft[seqDraft.length - 1];
+        if (last === id) return;
+        seqDraft.push(id);
+        refreshSequenceDraftVisuals();
+        showToast(`Sequence step ${seqDraft.length}`);
+      }
+
+      function refreshSequenceDraftVisuals() {
+        nodeEls.forEach((g, id) => {
+          g.classList.toggle("is-seq-draft", seqDraft.includes(id));
+        });
+      }
+
+      function pulseNode(id) {
+        const g = nodeEls.get(id);
+        if (!g) return;
+        g.classList.add("is-seq-active");
+        setTimeout(() => g.classList.remove("is-seq-active"), 260);
+      }
+
+      function onEditText(evt) {
+        evt.stopPropagation();
+        const g = evt.currentTarget.parentNode;
+        const id = g.getAttribute("data-id");
+        const role = evt.currentTarget.getAttribute("data-role");
+        beginEditForNode(id, role);
+      }
+
+      // ─── Chrome actions ────────────────────────────────────────────
+      const toast = document.getElementById("toast");
+      const ctxMenu = document.getElementById("ctx-menu");
+      const seqChipRow = document.getElementById("seq-chip-row");
+      const btnSeqRecord = document.getElementById("btn-seq-record");
+      const btnSeqSave = document.getElementById("btn-seq-save");
+      const btnSeqTuner = document.getElementById("btn-seq-tuner");
+      const seqTuner = document.getElementById("seq-tuner");
+      const seqSpeed = document.getElementById("seq-speed");
+      const seqGlow = document.getElementById("seq-glow");
+      const seqIntensity = document.getElementById("seq-intensity");
+      const seqEase = document.getElementById("seq-ease");
+      const seqSpeedVal = document.getElementById("seq-speed-val");
+      const seqEaseVal = document.getElementById("seq-ease-val");
+      const seqGlowVal = document.getElementById("seq-glow-val");
+      const seqIntensityVal = document.getElementById("seq-intensity-val");
+      function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add("is-visible");
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(
+          () => toast.classList.remove("is-visible"),
+          1400,
+        );
+      }
+
+      function hideContextMenu() {
+        ctxMenu.hidden = true;
+        ctxMenu.replaceChildren();
+      }
+
+      function edgeForPair(a, b) {
+        const k = edgeKey(a, b);
+        return EDGES.find((e) => edgeKey(e.from, e.to) === k) || null;
+      }
+
+      function ensurePlaybackOrb() {
+        let orb = document.getElementById("sequence-orb");
+        if (orb) return orb;
+        orb = el("g", { id: "sequence-orb", hidden: "true" }, layerSequence);
+        el(
+          "circle",
+          {
+            id: "sequence-orb-halo",
+            cx: 0,
+            cy: 0,
+            r: 1.2,
+            fill: "url(#orb-halo-grad)",
+            filter: "url(#orb-glow)",
+          },
+          orb,
+        );
+        el(
+          "circle",
+          {
+            id: "sequence-orb-core",
+            cx: 0,
+            cy: 0,
+            r: 0.48,
+            fill: "url(#orb-core-grad)",
+            filter: "url(#orb-glow)",
+          },
+          orb,
+        );
+        return orb;
+      }
+
+      function applyOrbTuning() {
+        const halo = document.getElementById("sequence-orb-halo");
+        const core = document.getElementById("sequence-orb-core");
+        if (!halo || !core) return;
+        halo.setAttribute("r", String(1.2 * sequenceSettings.glow));
+        halo.setAttribute("opacity", String(Math.min(1.25, 0.55 * sequenceSettings.intensity)));
+        core.setAttribute("r", String(0.48 + 0.08 * sequenceSettings.intensity));
+        core.setAttribute("opacity", String(Math.min(1.2, 0.9 + 0.2 * sequenceSettings.intensity)));
+      }
+
+      function updateTunerReadouts() {
+        seqSpeedVal.textContent = `${sequenceSettings.speed.toFixed(0)} u/s`;
+        seqEaseVal.textContent = `${sequenceSettings.ease.toFixed(2)}`;
+        seqGlowVal.textContent = `${sequenceSettings.glow.toFixed(2)}x`;
+        seqIntensityVal.textContent = `${sequenceSettings.intensity.toFixed(2)}x`;
+      }
+
+      function stopSequencePlayback() {
+        if (playback && playback.rafId) cancelAnimationFrame(playback.rafId);
+        playback = null;
+        const orb = document.getElementById("sequence-orb");
+        if (orb) orb.setAttribute("hidden", "true");
+      }
+
+      function playSequenceById(id) {
+        const seq = sequences.find((s) => s.id === id);
+        if (!seq) return;
+        if (seq.nodes.length < 2) {
+          showToast("Sequence needs 2+ nodes");
+          return;
+        }
+        const segments = [];
+        for (let i = 0; i < seq.nodes.length - 1; i++) {
+          const fromId = seq.nodes[i];
+          const toId = seq.nodes[i + 1];
+          const fromNode = nodeIndex.get(fromId);
+          const toNode = nodeIndex.get(toId);
+          if (!fromNode || !toNode) {
+            showToast("Sequence node missing");
+            return;
+          }
+          const edge = edgeForPair(fromId, toId);
+          if (!edge) {
+            showToast(`Missing strand ${fromId} → ${toId}`);
+            return;
+          }
+          const d = edgePath(fromNode, toNode, edge.crosses);
+          const p = document.createElementNS(SVG_NS, "path");
+          p.setAttribute("d", d);
+          const len = p.getTotalLength();
+          segments.push({ fromId, toId, path: p, len });
+        }
+
+        stopSequencePlayback();
+        activeSequenceId = id;
+        renderSequenceChips();
+        const orb = ensurePlaybackOrb();
+        orb.removeAttribute("hidden");
+        applyOrbTuning();
+
+        const state = {
+          seqId: id,
+          segments,
+          segmentIndex: 0,
+          /** Wall-clock elapsed along current segment (seconds); mapped through easing → path length */
+          segmentTimeElapsed: 0,
+          holdUntilTs: null,
+          holdAtNodeId: seq.nodes[0],
+          lastTs: null,
+          rafId: null,
+        };
+        playback = state;
+        pulseNode(seq.nodes[0]);
+
+        function tick(ts) {
+          if (!playback || playback.seqId !== id) return;
+          if (state.lastTs == null) state.lastTs = ts;
+          const dt = (ts - state.lastTs) / 1000;
+          state.lastTs = ts;
+
+          // Hold orb on the node for a beat.
+          if (state.holdAtNodeId) {
+            const n = nodeIndex.get(state.holdAtNodeId);
+            if (n) orb.setAttribute("transform", `translate(${n.x} ${n.y})`);
+            if (state.holdUntilTs == null) {
+              state.holdUntilTs = ts + NODE_BEAT_MS;
+            }
+            if (ts < state.holdUntilTs) {
+              state.rafId = requestAnimationFrame(tick);
+              return;
+            }
+            state.holdUntilTs = null;
+            state.holdAtNodeId = null;
+          }
+
+          const seg = segments[state.segmentIndex];
+          if (!seg) {
+            setTimeout(() => stopSequencePlayback(), 140);
+            return;
+          }
+          const durationSec = Math.max(0.02, seg.len / sequenceSettings.speed);
+          state.segmentTimeElapsed += dt;
+          const uLinear = Math.min(1, state.segmentTimeElapsed / durationSec);
+          const uPath = blendPathEase(uLinear, sequenceSettings.ease);
+          const clampedDist = seg.len * uPath;
+          const pt = seg.path.getPointAtLength(clampedDist);
+          orb.setAttribute("transform", `translate(${pt.x} ${pt.y})`);
+
+          if (uLinear >= 1 - 1e-6) {
+            // Arrived at next node: settle for a beat.
+            pulseNode(seg.toId);
+            state.segmentIndex += 1;
+            state.segmentTimeElapsed = 0;
+            state.holdAtNodeId = seg.toId;
+          }
+          state.rafId = requestAnimationFrame(tick);
+        }
+        state.rafId = requestAnimationFrame(tick);
+      }
+
+      function renderSequenceChips() {
+        seqChipRow.replaceChildren();
+        sequences.forEach((seq) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "seq-chip" + (seq.id === activeSequenceId ? " is-active" : "");
+          b.textContent = `${seq.id} (${seq.nodes.length})`;
+          b.addEventListener("click", () => playSequenceById(seq.id));
+          seqChipRow.appendChild(b);
+        });
+      }
+
+      function showContextMenu(clientX, clientY, items) {
+        ctxMenu.replaceChildren();
+        items.forEach((item) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "ctx-menu__item";
+          btn.textContent = item.label;
+          btn.addEventListener("click", () => {
+            hideContextMenu();
+            item.onClick();
+          });
+          ctxMenu.appendChild(btn);
+        });
+        ctxMenu.hidden = false;
+        ctxMenu.style.left = `${clientX}px`;
+        ctxMenu.style.top = `${clientY}px`;
+        const rect = ctxMenu.getBoundingClientRect();
+        const left = Math.min(
+          Math.max(6, clientX),
+          window.innerWidth - rect.width - 6,
+        );
+        const top = Math.min(
+          Math.max(6, clientY),
+          window.innerHeight - rect.height - 6,
+        );
+        ctxMenu.style.left = `${left}px`;
+        ctxMenu.style.top = `${top}px`;
+      }
+
+      function beginEditForNode(id, role) {
+        const g = nodeEls.get(id);
+        if (!g) return;
+        const t = g.querySelector(`text[data-role="${role}"]`);
+        if (!t) return;
+        const n = nodeIndex.get(id);
+        const rect = t.getBoundingClientRect();
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = n[role] || "";
+        input.className = "edit-input" + (role === "kind" ? " is-kind" : "");
+        const minW = role === "kind" ? 140 : 200;
+        const leftFor = () => {
+          const anchor = t.getAttribute("text-anchor");
+          const w = Math.max(minW, rect.width + 60);
+          if (anchor === "end") return Math.max(8, rect.right - w);
+          if (anchor === "middle")
+            return Math.max(8, rect.left + rect.width / 2 - w / 2);
+          return Math.max(8, rect.left - 6);
+        };
+        Object.assign(input.style, {
+          left: `${leftFor()}px`,
+          top: `${Math.max(8, rect.top - 6)}px`,
+          width: `${Math.max(minW, rect.width + 60)}px`,
+        });
+        document.body.appendChild(input);
+        t.style.opacity = "0";
+        input.focus();
+        input.select();
+
+        let saved = true;
+        const cleanup = () => {
+          if (saved) {
+            n[role] = input.value;
+            setText(t, input.value);
+            persistState();
+          }
+          t.style.opacity = "";
+          input.remove();
+        };
+        input.addEventListener("blur", cleanup);
+        input.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") {
+            ke.preventDefault();
+            input.blur();
+          } else if (ke.key === "Escape") {
+            ke.preventDefault();
+            saved = false;
+            input.blur();
+          }
+        });
+      }
+
+      document.getElementById("btn-copy").addEventListener("click", () => {
+        const payload = {
+          nodes: NODES.map(({ id, label, kind, zone, x, y, lp }) => ({
+            id,
+            label,
+            kind,
+            zone,
+            x: Math.round(x * 10) / 10,
+            y: Math.round(y * 10) / 10,
+            lp,
+          })),
+          edges: EDGES.map(({ from, to, kind, crosses }) => ({
+            from,
+            to,
+            kind,
+            ...(crosses ? { crosses } : {}),
+          })),
+          sequences: sequences.map((s) => ({ id: s.id, nodes: [...s.nodes] })),
+          settings: { ...sequenceSettings },
+        };
+        const text = JSON.stringify(payload, null, 2);
+        navigator.clipboard
+          .writeText(text)
+          .then(() => showToast("Copied · NODES + EDGES"))
+          .catch(() => {
+            console.log(text);
+            showToast("Copy blocked · logged to console");
+          });
+      });
+
+      const btnConnect = document.getElementById("btn-connect");
+      const btnClearEdges = document.getElementById("btn-clear-edges");
+      function updateModeButtons() {
+        btnConnect.textContent = `Connect: ${connectMode ? "On" : "Off"}`;
+        btnConnect.classList.toggle("is-active", connectMode);
+        btnSeqRecord.textContent = `Seq record: ${seqRecordMode ? "On" : "Off"}`;
+        btnSeqRecord.classList.toggle("is-active", seqRecordMode);
+        if (!deleteNodeMode) {
+          nodeEls.forEach((g) => g.classList.remove("is-delete-target"));
+        }
+        refreshSequenceDraftVisuals();
+      }
+      btnConnect.addEventListener("click", () => {
+        connectMode = !connectMode;
+        if (connectMode) {
+          addNodeMode = false;
+          deleteNodeMode = false;
+        } else {
+          clearSelection();
+        }
+        updateModeButtons();
+      });
+      btnClearEdges.addEventListener("click", () => {
+        EDGES = [];
+        stopSequencePlayback();
+        activeSequenceId = null;
+        clearSelection();
+        renderEdges();
+        renderSequenceChips();
+        persistState();
+        showToast("All strands cleared");
+      });
+
+      btnSeqRecord.addEventListener("click", () => {
+        seqRecordMode = !seqRecordMode;
+        if (seqRecordMode) {
+          connectMode = false;
+          clearSelection();
+          showToast("Sequence record on");
+        }
+        updateModeButtons();
+      });
+
+      btnSeqSave.addEventListener("click", () => {
+        if (seqDraft.length < 2) {
+          showToast("Need 2+ nodes in draft");
+          return;
+        }
+        sequenceCounter += 1;
+        const id = `seq-${sequenceCounter}`;
+        sequences.push({ id, nodes: [...seqDraft] });
+        seqDraft = [];
+        seqRecordMode = false;
+        renderSequenceChips();
+        updateModeButtons();
+        persistState();
+        showToast(`Saved ${id}`);
+      });
+
+      btnSeqTuner.addEventListener("click", () => {
+        seqTuner.hidden = !seqTuner.hidden;
+      });
+
+      seqSpeed.addEventListener("input", () => {
+        sequenceSettings.speed = Number(seqSpeed.value);
+        updateTunerReadouts();
+        persistState();
+      });
+      seqEase.addEventListener("input", () => {
+        sequenceSettings.ease = Number(seqEase.value);
+        updateTunerReadouts();
+        persistState();
+      });
+      seqGlow.addEventListener("input", () => {
+        sequenceSettings.glow = Number(seqGlow.value);
+        updateTunerReadouts();
+        applyOrbTuning();
+        persistState();
+      });
+      seqIntensity.addEventListener("input", () => {
+        sequenceSettings.intensity = Number(seqIntensity.value);
+        updateTunerReadouts();
+        applyOrbTuning();
+        persistState();
+      });
+
+      document.getElementById("btn-reset").addEventListener("click", () => {
+        NODES = INITIAL_NODES.map((n) => ({ ...n }));
+        EDGES = INITIAL_EDGES.map((e) => ({ ...e }));
+        nodeIndex = new Map(NODES.map((n) => [n.id, n]));
+        nodeCounter = NODES.length;
+        seqDraft = [];
+        sequences = [];
+        sequenceCounter = 0;
+        activeSequenceId = null;
+        seqRecordMode = false;
+        stopSequencePlayback();
+        clearSelection();
+        renderEdges();
+        renderNodes();
+        renderSequenceChips();
+        updateTunerReadouts();
+        persistState();
+        showToast("Reset");
+      });
+
+      svg.addEventListener("click", (evt) => {
+        hideContextMenu();
+        if (!addNodeMode) return;
+        const target = evt.target;
+        if (
+          target.closest(".node") ||
+          (target.tagName && target.tagName.toLowerCase() === "path")
+        ) {
+          return;
+        }
+        const p = svgPoint(evt);
+        addNodeAt(p.x, p.y);
+      });
+
+      svg.addEventListener("contextmenu", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        const nodeGroup =
+          evt.target && evt.target.closest ? evt.target.closest(".node") : null;
+        if (nodeGroup) {
+          const id = nodeGroup.getAttribute("data-id");
+          showContextMenu(evt.clientX, evt.clientY, [
+            {
+              label: "Rename label",
+              onClick: () => beginEditForNode(id, "label"),
+            },
+            {
+              label: "Rename kind",
+              onClick: () => beginEditForNode(id, "kind"),
+            },
+            {
+              label: "Delete node",
+              onClick: () => deleteNode(id),
+            },
+          ]);
+          return;
+        }
+        const p = svgPoint(evt);
+        showContextMenu(evt.clientX, evt.clientY, [
+          {
+            label: "Add node here",
+            onClick: () => addNodeAt(p.x, p.y),
+          },
+          {
+            label: "Cancel",
+            onClick: () => {},
+          },
+        ]);
+      });
+
+      document.addEventListener("click", (evt) => {
+        if (!ctxMenu.hidden && !ctxMenu.contains(evt.target)) {
+          hideContextMenu();
+        }
+      });
+      window.addEventListener("resize", hideContextMenu);
+      window.addEventListener("scroll", hideContextMenu, true);
+
+      // ─── Initial render ────────────────────────────────────────────
+      loadPersistedState();
+      seqSpeed.value = String(sequenceSettings.speed);
+      seqEase.value = String(sequenceSettings.ease);
+      seqGlow.value = String(sequenceSettings.glow);
+      seqIntensity.value = String(sequenceSettings.intensity);
+      renderZones();
+      renderDividers();
+      renderEdges();
+      renderNodes();
+      renderSequenceChips();
+      updateTunerReadouts();
+      updateModeButtons();
+    </script>
+    <script src="canvas-nav.js"></script>
+  </body>
+</html>

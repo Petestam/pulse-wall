@@ -20,3 +20,4 @@ Serve `topology/` over HTTP, then open these paths (or click through from the re
 | Reticulum · fabric network | [topology/preview/reticulum.html](topology/preview/reticulum.html) |
 | Perseus · generative (main) | [topology/preview/perseus.html](topology/preview/perseus.html) |
 | Coma Berenices · preview grid (six embeds + dock) | [topology/preview/coma-berenices.html](topology/preview/coma-berenices.html) |
+| Lyra · zones (branch starter · External / AI / Backend+DC) | [topology/preview/lyra.html](topology/preview/lyra.html) |
