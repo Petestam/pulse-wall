@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ellipsoid 2:1:1 · blue gradient</title>
+    <title>Andromeda · ellipsoid gradient surface · Pulse</title>
+    <link rel="stylesheet" href="canvas-chrome.css" />
     <style>
       * {
         box-sizing: border-box;
@@ -16,7 +17,7 @@
         font-family: system-ui, sans-serif;
       }
       body {
-        background: #050a1f;
+        background: #000;
       }
       #bg {
         position: fixed;
@@ -26,26 +27,6 @@
         width: 100%;
         height: 100%;
         pointer-events: none;
-      }
-      /* Largest 12×5 (topology tile) rectangle inside the window */
-      .viewport-stage {
-        position: fixed;
-        inset: 0;
-        z-index: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-      }
-      .viewport-12x5 {
-        pointer-events: auto;
-        position: relative;
-        width: min(100vw, calc(100vh * 12 / 5));
-        height: min(100vh, calc(100vw * 5 / 12));
-        flex-shrink: 0;
-        border-radius: 2px;
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-        overflow: hidden;
       }
       #viz {
         position: absolute;
@@ -60,223 +41,15 @@
       #viz.is-dragging {
         cursor: grabbing;
       }
-      .chrome {
-        position: fixed;
-        left: 16px;
-        bottom: 16px;
-        z-index: 2;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 10px;
-        font-size: 12px;
-      }
-      .chrome a {
-        color: rgba(255, 255, 255, 0.45);
-        text-decoration: none;
-      }
-      .chrome a:hover {
-        color: rgba(255, 255, 255, 0.85);
-      }
-      .chrome button {
-        border: 1px solid rgba(255, 255, 255, 0.28);
-        background: rgba(5, 10, 31, 0.55);
-        color: rgba(230, 248, 255, 0.9);
-        padding: 8px 14px;
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        cursor: pointer;
-        border-radius: 2px;
-      }
-      .chrome button:hover {
-        border-color: rgba(0, 210, 255, 0.45);
-        color: #fff;
-      }
-      .chrome button.is-active {
-        border-color: rgba(0, 210, 255, 0.65);
-        box-shadow: 0 0 14px rgba(0, 185, 255, 0.25);
-        color: #f4fbff;
-      }
-      .chrome .sep {
-        color: rgba(255, 255, 255, 0.25);
-        user-select: none;
-      }
-      .chrome-bg-ctrl {
-        display: inline-flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 10px 14px;
-        margin-left: 4px;
-        font-size: 10px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.42);
-      }
-      .chrome-bg-ctrl label {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-      }
-      .chrome-bg-ctrl input[type="range"] {
-        width: 84px;
-        vertical-align: middle;
-      }
-      .chrome-bg-ctrl__val {
-        min-width: 1.75em;
-        font-variant-numeric: tabular-nums;
-        color: rgba(255, 255, 255, 0.55);
-      }
-      .chrome-tools {
-        display: inline-flex;
-        align-items: flex-end;
-        gap: 6px;
-      }
-      .chrome-tool {
-        position: relative;
-        display: inline-flex;
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .chrome-tool__pop {
-        position: absolute;
-        bottom: 100%;
-        left: 0;
-        z-index: 4;
-        margin-bottom: 6px;
-        min-width: 212px;
-        padding: 10px 12px;
-        background: rgba(5, 10, 31, 0.94);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 4px;
-        box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.4);
-        color: rgba(230, 248, 255, 0.9);
-        font-size: 10px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        opacity: 0;
-        visibility: hidden;
-        max-height: 0;
-        overflow: hidden;
-        pointer-events: none;
-        transition:
-          opacity 0.18s ease,
-          max-height 0.22s ease,
-          visibility 0.18s;
-      }
-      .chrome-tool.chrome-tool--open .chrome-tool__pop {
-        opacity: 1;
-        visibility: visible;
-        /* Cap below the top of the window; scroll when content is taller */
-        max-height: min(85vh, 720px);
-        overflow-x: hidden;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(0, 210, 255, 0.35) transparent;
-        pointer-events: auto;
-      }
-      .chrome-tool.chrome-tool--open .chrome-tool__pop::-webkit-scrollbar {
-        width: 6px;
-      }
-      .chrome-tool.chrome-tool--open .chrome-tool__pop::-webkit-scrollbar-thumb {
-        background: rgba(0, 210, 255, 0.35);
-        border-radius: 3px;
-      }
-      .chrome-tool__pop button.chrome-tool__reseed {
-        width: 100%;
-        margin-top: 8px;
-        padding: 7px 10px;
-        font-size: 10px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        border: 1px solid rgba(255, 255, 255, 0.28);
-        background: rgba(5, 10, 31, 0.55);
-        color: rgba(230, 248, 255, 0.9);
-        border-radius: 2px;
-        cursor: pointer;
-      }
-      .chrome-tool__pop button.chrome-tool__reseed:hover {
-        border-color: rgba(0, 210, 255, 0.45);
-        color: #fff;
-      }
-      .chrome-tool__pop label {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .chrome-tool__pop label + label {
-        margin-top: 10px;
-      }
-      .chrome-tool__pop .slide-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .chrome-tool__pop .slide-val {
-        flex-shrink: 0;
-        min-width: 3em;
-        text-align: right;
-        color: rgba(255, 255, 255, 0.55);
-        font-size: 10px;
-        font-variant-numeric: tabular-nums;
-      }
-      .chrome-tool__pop .chrome-tool__subhead {
-        margin: 0 0 6px;
-        font-size: 10px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: rgba(0, 210, 255, 0.55);
-      }
-      .chrome-tool__pop .chrome-tool__subhead:not(:first-child) {
-        margin-top: 12px;
-      }
-      .chrome-tool__pop .chrome-tool__toggles {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .chrome-tool__pop .chrome-tool__toggles label {
-        flex-direction: row;
-        align-items: center;
-        gap: 6px;
-        text-transform: none;
-        letter-spacing: 0.03em;
-        font-size: 10px;
-        cursor: pointer;
-      }
-      .chrome-tool__pop .chrome-tool__toggles input {
-        accent-color: rgba(0, 210, 255, 0.75);
-      }
-      .chrome-tool__pop input[type="range"] {
-        width: 100%;
-        min-width: 0;
-        accent-color: rgba(0, 210, 255, 0.75);
-      }
-      .chrome-tool__row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .chrome-tool__val {
-        flex-shrink: 0;
-        min-width: 2.5em;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-        color: rgba(255, 255, 255, 0.5);
-        font-size: 10px;
-      }
     </style>
   </head>
-  <body>
+  <body data-pulse-page="andromeda">
     <canvas id="bg" width="300" height="150" aria-hidden="true"></canvas>
-    <div class="viewport-stage" aria-hidden="true">
+    <div class="viewport-stage viewport-stage--above-bg" aria-hidden="true">
       <div class="viewport-12x5" id="viewport-12x5">
         <canvas
           id="viz"
-          aria-label="Ellipsoid in 12×5×5 volume — drag to rotate, scroll to zoom, Reset view for 12×5 front"
+          aria-label="Andromeda — ellipsoid in 12×5×5 volume; drag to rotate, scroll to zoom, Reset for 12×5 front"
         ></canvas>
       </div>
     </div>
@@ -415,6 +188,13 @@
                 <span class="chrome-tool__val" id="panel-line-val">42</span>
               </div>
             </label>
+            <label>
+              <span>Transit spine (screen)</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="panel-transit-spine" min="0" max="100" value="58" step="1" />
+                <span class="chrome-tool__val" id="panel-transit-spine-val">58</span>
+              </div>
+            </label>
           </div>
           <button type="button" id="btn-panels" aria-pressed="false" aria-expanded="false" title="Volleyball / soccer-style panel seams — click for options">
             Panels
@@ -473,8 +253,8 @@
             <label>
               <span>Dot size</span>
               <div class="chrome-tool__row">
-                <input type="range" id="marker-size" min="50" max="500" value="300" step="5" />
-                <span class="chrome-tool__val" id="marker-size-val">3.00x</span>
+                <input type="range" id="marker-size" min="50" max="500" value="175" step="5" />
+                <span class="chrome-tool__val" id="marker-size-val">1.75x</span>
               </div>
             </label>
           </div>
@@ -519,6 +299,82 @@
                 <span class="chrome-tool__val" id="path-extend-val">0°</span>
               </div>
             </label>
+            <p class="chrome-tool__subhead">Nucleus grid</p>
+            <label>
+              <span>Grid spacing</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="nucleus-grid-spacing" min="1" max="1000" value="5" step="1" />
+                <span class="chrome-tool__val" id="nucleus-grid-spacing-val">0.005</span>
+              </div>
+            </label>
+            <label>
+              <span>Grid spacing mode</span>
+              <div class="chrome-tool__row" style="gap:12px">
+                <label class="row" style="gap:6px">
+                  <input type="radio" name="nucleus-grid-spacing-mode" id="nucleus-grid-spacing-square" value="square" checked />
+                  <span>Square</span>
+                </label>
+                <label class="row" style="gap:6px">
+                  <input type="radio" name="nucleus-grid-spacing-mode" id="nucleus-grid-spacing-triangular" value="triangular" />
+                  <span>Triangular</span>
+                </label>
+              </div>
+            </label>
+            <label>
+              <span>Grid quantity (cap)</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="nucleus-grid-qty" min="500" max="8000" value="2000" step="100" />
+                <span class="chrome-tool__val" id="nucleus-grid-qty-val">2000</span>
+              </div>
+            </label>
+            <label>
+              <span>Origin tightness</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="nucleus-origin-tightness" min="0" max="100" value="10" step="1" />
+                <span class="chrome-tool__val" id="nucleus-origin-tightness-val">10%</span>
+              </div>
+            </label>
+            <label>
+              <span>Grid jitter</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="nucleus-grid-jitter" min="0" max="100" value="0" step="1" />
+                <span class="chrome-tool__val" id="nucleus-grid-jitter-val">0%</span>
+              </div>
+            </label>
+            <label>
+              <span>Orb offset (cull radius)</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="nucleus-cull-offset" min="8" max="220" value="60" step="1" />
+                <span class="chrome-tool__val" id="nucleus-cull-offset-val">0.60</span>
+              </div>
+            </label>
+            <label>
+              <span>Dot size (x marker half)</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="nucleus-dot-size" min="40" max="220" value="55" step="1" />
+                <span class="chrome-tool__val" id="nucleus-dot-size-val">0.55x</span>
+              </div>
+            </label>
+            <label>
+              <span>Dot opacity</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="nucleus-dot-opacity" min="15" max="100" value="100" step="1" />
+                <span class="chrome-tool__val" id="nucleus-dot-opacity-val">100%</span>
+              </div>
+            </label>
+            <label>
+              <span>Bend quantity (elbow fillet)</span>
+              <div class="chrome-tool__row">
+                <input type="range" id="nucleus-bend-qty" min="0" max="8" value="1" step="1" />
+                <span class="chrome-tool__val" id="nucleus-bend-qty-val">1</span>
+              </div>
+            </label>
+            <label>
+              <div class="chrome-tool__row" style="gap:10px">
+                <input type="checkbox" id="nucleus-homerun-mode" />
+                <span>Straight homerun to nearest static</span>
+              </div>
+            </label>
           </div>
           <button type="button" id="btn-paths" class="is-active" aria-pressed="true" aria-expanded="false" title="Static pathfinder connections — click for controls">
             Pathfinder
@@ -537,13 +393,47 @@
           <span class="chrome-bg-ctrl__val" id="bg-wave-contrast-val">52</span>
         </label>
       </div>
-      <span class="sep">·</span>
-      <a href="blank-gradient-fabric.html">Fabric explore</a>
-      <span class="sep">·</span>
-      <a href="generative.html">Strand field</a>
-      <span class="sep">·</span>
-      <a href="index.html">Topology editor</a>
+      <details class="chrome-dotgrid-details">
+        <summary class="chrome-dotgrid-summary">Dot grid · vw/64</summary>
+        <div class="chrome-dotgrid-body">
+          <label class="chrome-dotgrid-check"
+            ><input type="checkbox" id="dotgrid-waves" /> Waves (grid)</label
+          >
+          <div class="chrome-dotgrid-spacing">
+            <span class="chrome-dotgrid-label">Spacing</span>
+            <label
+              ><input type="radio" name="dotgrid-spacing" value="square" checked /> Square</label
+            >
+            <label
+              ><input type="radio" name="dotgrid-spacing" value="triangular" /> Triangular</label
+            >
+          </div>
+          <label class="chrome-dotgrid-row">
+            <span>Contrast</span>
+            <input type="range" id="dotgrid-contrast" min="0" max="100" value="28" step="1" />
+            <span id="dotgrid-contrast-val">28</span>
+          </label>
+        </div>
+      </details>
+      <nav class="chrome-nav" aria-label="Pulse canvas views">
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="orion" href="orion.html">Orion · classic</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="eridanus" href="eridanus.html">Eridanus · field</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="andromeda" href="andromeda.html">Andromeda · gradient</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="reticulum" href="reticulum.html">Reticulum · fabric</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="perseus" href="perseus.html">Perseus · generative</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="coma-berenices" href="coma-berenices.html">Coma Berenices · grid</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="ophiuchus" href="ophiuchus.html">Ophiuchus · topology</a>
+      </nav>
     </div>
+    <script src="canvas-dot-grid.js"></script>
+    <script src="generative-field-bg.js"></script>
     <script>
       (function () {
         "use strict";
@@ -613,68 +503,15 @@
             rows = Math.ceil(h / gridStep) + 3;
           }
 
-          ctx.fillStyle = "#050a1f";
-          ctx.fillRect(0, 0, w, h);
-
-          const shift = Math.sin(t * 0.09) * w * 0.05 + Math.cos(t * 0.055) * w * 0.035;
-          const tilt = Math.sin(t * 0.035) * 0.1;
-          const x1 = shift;
-          const y1 = tilt * h;
-          const x2 = w + shift * 0.28;
-          const y2 = h - tilt * h;
-          const baseGrad = ctx.createLinearGradient(x1, y1, x2, y2);
-          baseGrad.addColorStop(0, "rgba(72, 188, 245, 0.92)");
-          baseGrad.addColorStop(0.28 + Math.sin(t * 0.07) * 0.03, "rgba(38, 78, 210, 0.88)");
-          baseGrad.addColorStop(0.58 + Math.cos(t * 0.05) * 0.025, "rgba(22, 48, 150, 0.9)");
-          baseGrad.addColorStop(0.82, "rgba(8, 14, 45, 0.95)");
-          baseGrad.addColorStop(1, "#050a1f");
-          ctx.globalAlpha = 0.72;
-          ctx.fillStyle = baseGrad;
-          ctx.fillRect(0, 0, w, h);
-          ctx.globalAlpha = 1;
-
-          ctx.globalCompositeOperation = "screen";
-          for (let i = 0; i < BLOB_COUNT; i++) {
-            const k = i + 0.37;
-            const bx =
-              w *
-              (0.5 +
-                0.44 * Math.sin(t * 0.058 + k * 1.17) * Math.cos(t * 0.038 + k * 0.51) +
-                0.06 * Math.sin(t * 0.16 + k));
-            const by =
-              h *
-              (0.48 +
-                0.4 * Math.cos(t * 0.048 + k * 1.31) +
-                0.08 * Math.sin(t * 0.12 + k * 0.9) +
-                0.045 * Math.cos(t * 0.24 + i * 0.4));
-            const br = m * (0.42 + 0.18 * Math.sin(t * 0.065 + i) + 0.07 * Math.cos(t * 0.09 + i * 1.8));
-            const hueShift = 0.1 * Math.sin(t * 0.07 + i);
-            drawBlob(bx, by, br, [
-              [0, "rgba(120, 210, 255, " + (0.1 + hueShift * 0.04) + ")"],
-              [0.22, "rgba(70, 130, 235, " + (0.08 - hueShift * 0.02) + ")"],
-              [0.55, "rgba(35, 70, 175, 0.045)"],
-              [0.82, "rgba(12, 22, 70, 0.02)"],
-              [1, "rgba(5, 10, 31, 0)"],
-            ]);
+          if (window.GenerativeFieldBg) {
+            window.GenerativeFieldBg.ensureInit(w, h);
+            window.GenerativeFieldBg.drawBackground(ctx, w, h, t);
+            window.GenerativeFieldBg.drawDotGrid(ctx, w, h, t);
+            window.GenerativeFieldBg.drawVignette(ctx, w, h);
+          } else {
+            ctx.fillStyle = "rgb(7,24,45)";
+            ctx.fillRect(0, 0, w, h);
           }
-
-          ctx.globalCompositeOperation = "lighter";
-          for (let i = 0; i < 5; i++) {
-            const bx =
-              w * (0.12 + 0.76 * (0.5 + 0.5 * Math.sin(t * 0.042 + i * 1.9))) +
-              w * 0.055 * Math.cos(t * 0.1 + i);
-            const by =
-              h * (0.1 + 0.8 * (0.5 + 0.5 * Math.cos(t * 0.05 + i * 2.1))) +
-              h * 0.045 * Math.sin(t * 0.11 + i * 0.7);
-            const br = m * (0.52 + 0.12 * Math.sin(t * 0.055 + i));
-            drawBlob(bx, by, br, [
-              [0, "rgba(85, 155, 240, 0.065)"],
-              [0.45, "rgba(45, 75, 165, 0.035)"],
-              [0.78, "rgba(15, 25, 80, 0.012)"],
-              [1, "rgba(5, 10, 31, 0)"],
-            ]);
-          }
-          ctx.globalCompositeOperation = "source-over";
 
           const waveX = (px, py, tt) => {
             let x = 0;
@@ -744,6 +581,13 @@
           requestAnimationFrame(tick);
         }
 
+        const dotGridDetailsEl = document.querySelector(".chrome-dotgrid-details");
+        if (dotGridDetailsEl && window.PulseCanvasDotGrid) {
+          window.PulseCanvasDotGrid.mountChromeDetails(dotGridDetailsEl, function () {
+            requestAnimationFrame(tick);
+          });
+        }
+
         resize();
         window.addEventListener("resize", resize);
         requestAnimationFrame(tick);
@@ -792,6 +636,8 @@
         const panelLineVal = document.getElementById("panel-line-val");
         const panelLinkSkipInput = document.getElementById("panel-link-skip");
         const panelLinkSkipVal = document.getElementById("panel-link-skip-val");
+        const panelTransitSpineInput = document.getElementById("panel-transit-spine");
+        const panelTransitSpineVal = document.getElementById("panel-transit-spine-val");
         const meshOpacityInput = document.getElementById("mesh-opacity");
         const meshOpacityVal = document.getElementById("mesh-opacity-val");
         const markerCountInput = document.getElementById("marker-count");
@@ -804,6 +650,25 @@
         const pathHandleVal = document.getElementById("path-handle-val");
         const pathExtendInput = document.getElementById("path-extend");
         const pathExtendVal = document.getElementById("path-extend-val");
+        const nucleusGridSpacingInput = document.getElementById("nucleus-grid-spacing");
+        const nucleusGridSpacingVal = document.getElementById("nucleus-grid-spacing-val");
+        const nucleusGridSpacingSquareInput = document.getElementById("nucleus-grid-spacing-square");
+        const nucleusGridSpacingTriInput = document.getElementById("nucleus-grid-spacing-triangular");
+        const nucleusGridQtyInput = document.getElementById("nucleus-grid-qty");
+        const nucleusGridQtyVal = document.getElementById("nucleus-grid-qty-val");
+        const nucleusOriginTightnessInput = document.getElementById("nucleus-origin-tightness");
+        const nucleusOriginTightnessVal = document.getElementById("nucleus-origin-tightness-val");
+        const nucleusGridJitterInput = document.getElementById("nucleus-grid-jitter");
+        const nucleusGridJitterVal = document.getElementById("nucleus-grid-jitter-val");
+        const nucleusCullOffsetInput = document.getElementById("nucleus-cull-offset");
+        const nucleusCullOffsetVal = document.getElementById("nucleus-cull-offset-val");
+        const nucleusDotSizeInput = document.getElementById("nucleus-dot-size");
+        const nucleusDotSizeVal = document.getElementById("nucleus-dot-size-val");
+        const nucleusDotOpacityInput = document.getElementById("nucleus-dot-opacity");
+        const nucleusDotOpacityVal = document.getElementById("nucleus-dot-opacity-val");
+        const nucleusBendQtyInput = document.getElementById("nucleus-bend-qty");
+        const nucleusBendQtyVal = document.getElementById("nucleus-bend-qty-val");
+        const nucleusHomeRunModeInput = document.getElementById("nucleus-homerun-mode");
         const slideAngleInput = document.getElementById("slide-angle");
         const slideAnimSpeedInput = document.getElementById("slide-anim-speed");
         const slideOffVInput = document.getElementById("slide-off-v");
@@ -914,15 +779,17 @@
           panelLineDash: 42,
           /** Same seam only: index gap must exceed this to link panel dots. */
           panelLinkSkip: 2,
+          /** Andromeda override: center spine disabled to avoid center-density column. */
+          panelTransitSpine: 0,
           /** 0…1 multiplier on mesh wire alpha. */
           meshOpacity: 1,
           showMarkers: true,
-          showPaths: true,
+          showPaths: false,
           /** Show 10 fixed anchors in volume (independent of mesh slide). */
           showStaticVolumePoints: true,
           markerCount: 50,
-          /** 0.5..5 multiplier for marker dot size (default 3x). */
-          markerSizeMul: 3,
+          /** 0.5..5 multiplier for marker dot size (default 1.75×). */
+          markerSizeMul: 1.75,
           /** 0..5 multiplier for pathfinder fillet radius. */
           pathFilletMul: 1,
           /** 0..2.6 multiplier for offset orb size around each marker node. */
@@ -951,6 +818,29 @@
           selectedMarkerFlat: null,
           /** Index into proximity chains array for highlighted thread, or null. */
           selectedChainIndex: null,
+          /** Cached 3D nucleus model so orbiting does not regenerate it. */
+          nucleusModel: null,
+          nucleusModelKey: "",
+          /** 0.005..1.000 world-unit grid spacing */
+          nucleusGridSpacing: 0.005,
+          /** "square" | "triangular" */
+          nucleusGridSpacingMode: "square",
+          /** hard cap on rendered volumetric grid points */
+          nucleusGridQty: 2000,
+          /** 0..1 non-linear concentration toward origin (higher = tighter center packing). */
+          nucleusOriginTightness: 0.1,
+          /** 0..1 deterministic positional jitter as a fraction of grid spacing. */
+          nucleusGridJitter: 0,
+          /** world-space cull sphere radius offset around each static anchor */
+          nucleusCullOffset: 0.6,
+          /** scale relative to marker-half dot radius */
+          nucleusDotSizeMul: 0.55,
+          /** 0..1 nucleus dot alpha */
+          nucleusDotOpacity: 1,
+          /** number of orthogonal elbows per route (filleted). */
+          nucleusBendQty: 1,
+          /** route mode: true = direct line from each dot to nearest static anchor */
+          nucleusHomeRunMode: false,
         };
 
         /** Flat vertex indices (i * V_SEG + j) for white markers */
@@ -1224,7 +1114,7 @@
               ctx.lineTo(p1.x, p1.y);
             }
           }
-          ctx.strokeStyle = "rgba(0, 210, 255, 0.22)";
+          ctx.strokeStyle = "rgba(200, 220, 245, 0.2)";
           ctx.stroke();
         }
 
@@ -1369,6 +1259,63 @@
           ctx.moveTo(ax, ay);
           ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, bx, by);
           ctx.stroke();
+        }
+
+        /** One 90° corner in screen space (Manhattan leg). */
+        function strokePanelStrandOrthogonal(A, B) {
+          const dx = B.x - A.x;
+          const dy = B.y - A.y;
+          if (Math.abs(dx) + Math.abs(dy) < 2) return;
+          const corner =
+            Math.abs(dx) >= Math.abs(dy)
+              ? { x: B.x, y: A.y }
+              : { x: A.x, y: B.y };
+          ctx.beginPath();
+          ctx.moveTo(A.x, A.y);
+          ctx.lineTo(corner.x, corner.y);
+          ctx.lineTo(B.x, B.y);
+          ctx.stroke();
+        }
+
+        /**
+         * Manhattan path through a vertical spine at viewport center — parallel “bundle” mid-screen,
+         * horizontal in/out (stadium / long-range transit diagram sensibility).
+         */
+        function strokePanelStrandOrthogonalViaSpine(A, B, spineX, eps) {
+          const ex = eps !== undefined && eps !== null ? eps : 0.75;
+          if (Math.abs(B.x - A.x) + Math.abs(B.y - A.y) < 2) return;
+          if (Math.abs(A.y - B.y) < ex) {
+            ctx.beginPath();
+            ctx.moveTo(A.x, A.y);
+            ctx.lineTo(B.x, B.y);
+            ctx.stroke();
+            return;
+          }
+          ctx.beginPath();
+          ctx.moveTo(A.x, A.y);
+          if (Math.abs(A.x - spineX) > ex) {
+            ctx.lineTo(spineX, A.y);
+          }
+          if (Math.abs(A.y - B.y) > ex) {
+            ctx.lineTo(spineX, B.y);
+          }
+          if (Math.abs(B.x - spineX) > ex) {
+            ctx.lineTo(B.x, B.y);
+          }
+          ctx.stroke();
+        }
+
+        /** Blend orthogonal vs spine routing; `cd01` is 0…1 from “Transit spine (screen)” slider. */
+        function strokePanelStrandStadiumTransit(A, B, cw, ch, cd01, idA, idB, salt) {
+          const a = Math.max(0, Math.min(1, cd01));
+          if (a < 0.06) {
+            strokePanelStrandOrthogonal(A, B);
+            return;
+          }
+          const spineX =
+            cw * 0.5 +
+            (pairHash01(idA, idB, salt + 5) - 0.5) * 14 * a;
+          strokePanelStrandOrthogonalViaSpine(A, B, spineX, 0.75);
         }
 
         function panelLinkAllowedSameSeam(ciA, mA, ciB, mB, skip) {
@@ -1528,8 +1475,8 @@
             const p4 = markerScreenPos(f4, toCanvas, t);
             ctx.lineWidth = highlight ? 2.1 : 0.72;
             ctx.strokeStyle = highlight
-              ? "rgba(0, 248, 255, 0.92)"
-              : "rgba(0, 225, 255, 0.32)";
+              ? "rgba(255, 255, 255, 0.92)"
+              : "rgba(210, 225, 245, 0.28)";
             strokeMarkerChainElbows(p1, p2, p3, p4, f1, f2, f3, f4);
           }
 
@@ -1708,6 +1655,13 @@
           );
         }
 
+        /**
+         * Abstract hyperscale “facility” read: translucent shell (no flat black box),
+         * tiered horizontal bands (compute / fabric / persistence), radial data core,
+         * slate hub blades + white/slate east–west switching fabric, stadium uplinks
+         * in moonlight neutrals. Linework in this block is intentionally sparse (thinned grid,
+         * single core ring, no dashed fabric overlay, fewer edge/uplink strokes).
+         */
         function drawTrustZoneCore(toCanvas, t) {
           if (!state.showPaths || STATIC_POINT_UV.length < 2) return;
           const hubs3 = trustCoreHubs3D();
@@ -1730,12 +1684,16 @@
           const chassisW = Math.min(maxDim * 0.1, 128);
           const chassisH = Math.min(maxDim * 0.068, 88);
           const ellBase = trustTrackEllipseBase(coreC, chassisW, chassisH);
-          const rx = 3;
+          const rx = 4;
           const cx0 = coreC.x - chassisW * 0.5;
           const cy0 = coreC.y - chassisH * 0.5;
 
-          /* Rack / enclosure: dark panel, cold aisle rim */
-          ctx.fillStyle = "rgba(8, 14, 28, 0.78)";
+          /* Facility shell — glass slate, not opaque black */
+          const shellGrad = ctx.createLinearGradient(cx0, cy0, cx0 + chassisW, cy0 + chassisH);
+          shellGrad.addColorStop(0, "rgba(28, 42, 72, 0.38)");
+          shellGrad.addColorStop(0.5, "rgba(18, 30, 52, 0.32)");
+          shellGrad.addColorStop(1, "rgba(22, 36, 58, 0.4)");
+          ctx.fillStyle = shellGrad;
           ctx.beginPath();
           if (typeof ctx.roundRect === "function") {
             ctx.roundRect(cx0, cy0, chassisW, chassisH, rx);
@@ -1743,61 +1701,131 @@
             ctx.rect(cx0, cy0, chassisW, chassisH);
           }
           ctx.fill();
-          ctx.strokeStyle = "rgba(0, 210, 195, 0.48)";
-          ctx.lineWidth = 1.15;
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
+          ctx.lineWidth = 1;
           ctx.stroke();
 
-          /* Rigid grid — cross-hatch inside chassis (tension vs flowing lanes below) */
-          ctx.strokeStyle = "rgba(0, 140, 165, 0.16)";
-          ctx.lineWidth = 0.65;
+          /* Tier bands — fewer divisions (~40% less grid ink than 4×5) */
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.07)";
+          ctx.lineWidth = 0.55;
           ctx.lineJoin = "miter";
           ctx.lineCap = "butt";
-          const nBars = 4;
-          const nCols = 5;
+          const nBars = 3;
+          const nCols = 3;
           for (let b = 1; b < nBars; b++) {
             const yy = cy0 + (chassisH * b) / nBars;
             ctx.beginPath();
-            ctx.moveTo(cx0 + 4, yy);
-            ctx.lineTo(cx0 + chassisW - 4, yy);
+            ctx.moveTo(cx0 + 5, yy);
+            ctx.lineTo(cx0 + chassisW - 5, yy);
             ctx.stroke();
           }
           for (let c = 1; c < nCols; c++) {
             const xx = cx0 + (chassisW * c) / nCols;
             ctx.beginPath();
-            ctx.moveTo(xx, cy0 + 4);
-            ctx.lineTo(xx, cy0 + chassisH - 4);
+            ctx.moveTo(xx, cy0 + 5);
+            ctx.lineTo(xx, cy0 + chassisH - 5);
             ctx.stroke();
           }
           ctx.lineJoin = "round";
           ctx.lineCap = "round";
 
-          /* Crown jewels — soft vault marker */
-          const vaultR = Math.min(10, chassisW * 0.09);
-          ctx.fillStyle = "rgba(255, 200, 72, 0.1)";
-          ctx.strokeStyle = "rgba(255, 210, 120, 0.75)";
-          ctx.lineWidth = 1.05;
-          ctx.beginPath();
-          if (typeof ctx.roundRect === "function") {
-            ctx.roundRect(
-              coreC.x - vaultR,
-              coreC.y - vaultR,
-              vaultR * 2,
-              vaultR * 2,
-              2,
-            );
-          } else {
-            ctx.rect(coreC.x - vaultR, coreC.y - vaultR, vaultR * 2, vaultR * 2);
-          }
-          ctx.fill();
-          ctx.stroke();
-          ctx.strokeStyle = "rgba(255, 230, 160, 0.38)";
-          ctx.lineWidth = 0.6;
-          ctx.strokeRect(
-            coreC.x - vaultR * 0.55,
-            coreC.y - vaultR * 0.55,
-            vaultR * 1.1,
-            vaultR * 1.1,
+          /* Data core — radial plane (storage / consolidated plane), no gold box */
+          const vaultR = Math.min(11, chassisW * 0.1);
+          const rg = ctx.createRadialGradient(
+            coreC.x,
+            coreC.y,
+            0,
+            coreC.x,
+            coreC.y,
+            vaultR * 3.2,
           );
+          rg.addColorStop(0, "rgba(230, 238, 255, 0.1)");
+          rg.addColorStop(0.4, "rgba(120, 155, 210, 0.05)");
+          rg.addColorStop(1, "rgba(255, 255, 255, 0)");
+          ctx.fillStyle = rg;
+          ctx.beginPath();
+          ctx.arc(coreC.x, coreC.y, vaultR * 3.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
+          ctx.lineWidth = 0.85;
+          ctx.beginPath();
+          ctx.arc(coreC.x, coreC.y, vaultR * 1.15, 0, Math.PI * 2);
+          ctx.stroke();
+
+          /* Nucleus: particle sphere (datastores) with faint bezier links into smart switch origin. */
+          const nDataStores = 34;
+          const nucleusR = vaultR * 2.25;
+          const nowS = performance.now() * 0.001;
+
+          const shell = ctx.createRadialGradient(
+            coreC.x,
+            coreC.y,
+            vaultR * 0.2,
+            coreC.x,
+            coreC.y,
+            nucleusR * 1.05,
+          );
+          shell.addColorStop(0, "rgba(220, 232, 255, 0.08)");
+          shell.addColorStop(0.7, "rgba(168, 194, 232, 0.035)");
+          shell.addColorStop(1, "rgba(255, 255, 255, 0)");
+          ctx.fillStyle = shell;
+          ctx.beginPath();
+          ctx.arc(coreC.x, coreC.y, nucleusR * 1.05, 0, Math.PI * 2);
+          ctx.fill();
+
+          for (let pi = 0; pi < nDataStores; pi++) {
+            const a = pairHash01(pi, 31, 7001) * Math.PI * 2;
+            const r01 = Math.sqrt(pairHash01(pi, 47, 7013));
+            const rp = nucleusR * (0.24 + 0.74 * r01);
+            const px = coreC.x + Math.cos(a) * rp;
+            const py = coreC.y + Math.sin(a) * rp;
+
+            const bendSign = pairHash01(pi, 59, 7029) > 0.5 ? 1 : -1;
+            const bend = (0.18 + 0.28 * pairHash01(pi, 61, 7031)) * rp * bendSign;
+            const mx = (coreC.x + px) * 0.5;
+            const my = (coreC.y + py) * 0.5;
+            const nx = (py - coreC.y) / (rp || 1);
+            const ny = -(px - coreC.x) / (rp || 1);
+            const c1x = mx + nx * bend;
+            const c1y = my + ny * bend;
+
+            const twinkle =
+              0.72 +
+              0.28 *
+                Math.sin(
+                  nowS * 1.05 + pi * 0.47 + pairHash01(pi, 73, 7049) * Math.PI * 2,
+                );
+            ctx.strokeStyle = `rgba(220, 232, 255, ${0.06 + 0.08 * twinkle})`;
+            ctx.lineWidth = 0.32 + 0.12 * pairHash01(pi, 79, 7063);
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.bezierCurveTo(c1x, c1y, c1x, c1y, coreC.x, coreC.y);
+            ctx.stroke();
+          }
+
+          for (let pi = 0; pi < nDataStores; pi++) {
+            const a = pairHash01(pi, 83, 7091) * Math.PI * 2;
+            const r01 = Math.sqrt(pairHash01(pi, 89, 7103));
+            const rp = nucleusR * (0.24 + 0.74 * r01);
+            const px = coreC.x + Math.cos(a) * rp;
+            const py = coreC.y + Math.sin(a) * rp;
+            const pr = 0.42 + 0.95 * pairHash01(pi, 97, 7129);
+            ctx.fillStyle = `rgba(230, 240, 255, ${0.34 + 0.42 * pairHash01(pi, 101, 7151)})`;
+            ctx.beginPath();
+            ctx.arc(px, py, pr, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          /* Smart switch origin */
+          ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+          ctx.beginPath();
+          ctx.arc(coreC.x, coreC.y, 1.7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(230, 240, 255, 0.36)";
+          ctx.lineWidth = 0.65;
+          ctx.beginPath();
+          ctx.arc(coreC.x, coreC.y, 3.6, 0, Math.PI * 2);
+          ctx.stroke();
 
           const nh = hubScr.length;
           const centerIdx = hubs3.findIndex(
@@ -1805,22 +1833,22 @@
           );
           const vaultIdx = centerIdx >= 0 ? centerIdx : 0;
 
-          /* Blade ticks — rectilinear anchors on lattice */
+          /* Hub blades — slate tiles, hairline white (switch / rack face) */
           for (let hi = 0; hi < nh; hi++) {
             const H = hubScr[hi];
             const isVault = hi === vaultIdx;
             const bw = isVault ? 0 : 3.2;
             const bh = isVault ? 0 : 2.4;
             if (!isVault) {
-              ctx.fillStyle = "rgba(18, 32, 52, 0.92)";
+              ctx.fillStyle = "rgba(22, 36, 58, 0.92)";
               ctx.fillRect(H.x - bw * 0.5, H.y - bh * 0.5, bw, bh);
-              ctx.strokeStyle = "rgba(0, 200, 185, 0.58)";
-              ctx.lineWidth = 0.75;
+              ctx.strokeStyle = "rgba(255, 255, 255, 0.32)";
+              ctx.lineWidth = 0.72;
               ctx.strokeRect(H.x - bw * 0.5, H.y - bh * 0.5, bw, bh);
             }
           }
 
-          /* Rigid graph: straight edges only between grid neighbors */
+          /* East–west fabric — neighbor links only */
           ctx.lineJoin = "miter";
           ctx.lineCap = "butt";
           for (let i = 0; i < nh; i++) {
@@ -1831,63 +1859,60 @@
               const ay = hubScr[i].y;
               const bx = hubScr[j].x;
               const by = hubScr[j].y;
-              ctx.strokeStyle = `rgba(0, 195, 178, ${0.28 + p * 0.22})`;
-              ctx.lineWidth = 0.88 + p * 0.35;
+              ctx.strokeStyle = `rgba(200, 218, 240, ${0.18 + p * 0.2})`;
+              ctx.lineWidth = 0.75 + p * 0.28;
               ctx.setLineDash([]);
               ctx.beginPath();
               ctx.moveTo(ax, ay);
               ctx.lineTo(bx, by);
               ctx.stroke();
-              if (pairHash01(i, j, 702) > 0.52) {
-                ctx.strokeStyle = `rgba(100, 255, 230, ${0.1 + p * 0.08})`;
-                ctx.lineWidth = 0.4;
-                ctx.setLineDash([3, 4]);
-                ctx.beginPath();
-                ctx.moveTo(ax, ay);
-                ctx.lineTo(bx, by);
-                ctx.stroke();
-                ctx.setLineDash([]);
-              }
             }
           }
           ctx.lineJoin = "round";
           ctx.lineCap = "round";
 
-          /* Static ↔ static — outer-lap routing only (long ellipse), standardized fillets */
-          for (let i = 0; i < nStatic; i++) {
-            for (let j = i + 1; j < nStatic; j++) {
-              if (pairHash01(i, j, 1203) > 0.52) continue;
-              const w = pairHash01(i, j, 1205);
-              ctx.strokeStyle = `rgba(100, 220, 255, ${0.11 + w * 0.12})`;
-              ctx.lineWidth = 0.48 + w * 0.28;
-              ctx.setLineDash([]);
-              strokeStadiumRouted(
-                staticScr[i].x,
-                staticScr[i].y,
-                staticScr[j].x,
-                staticScr[j].y,
-                ellBase,
-                i + 3000,
-                j + 3000,
-                1400 + i * 41 + j,
-                0,
-              );
-            }
+          /* Edge ring ↔ core — curated trunk set (avoid dense all-pairs mesh / cloverleaf read) */
+          const trunkPairs = [
+            [0, 4],
+            [1, 6],
+            [2, 7],
+            [3, 8],
+            [5, 9],
+          ];
+          for (let k = 0; k < trunkPairs.length; k++) {
+            const i = trunkPairs[k][0];
+            const j = trunkPairs[k][1];
+            if (i >= nStatic || j >= nStatic || i === j) continue;
+            const w = pairHash01(i, j, 1205);
+            ctx.strokeStyle = `rgba(185, 205, 235, ${0.12 + w * 0.14})`;
+            ctx.lineWidth = 0.54 + w * 0.24;
+            ctx.setLineDash([]);
+            strokeStadiumRouted(
+              staticScr[i].x,
+              staticScr[i].y,
+              staticScr[j].x,
+              staticScr[j].y,
+              ellBase,
+              i + 3000,
+              j + 3000,
+              1400 + i * 41 + j,
+              (pairHash01(i, j, 1208) - 0.5) * 2.2,
+            );
           }
 
-          /* Uplinks: dual outer lanes + center ghost — same stadium vocabulary */
+          /* Uplinks: dual lanes only (no ghost trace; sparser picks) */
           const lane = 2.4;
           for (let si = 0; si < nStatic; si++) {
             const S = staticScr[si];
             for (let hi = 0; hi < nh; hi++) {
               const pick =
-                pairHash01(si + 11, hi + 3, 902) > 0.38 ||
-                (si + hi) % 3 === 0;
+                pairHash01(si + 11, hi + 3, 902) > 0.55 ||
+                (si + hi) % 5 === 0;
               if (!pick) continue;
               const H = hubScr[hi];
               const w = pairHash01(si, hi, 910);
-              ctx.strokeStyle = `rgba(0, 225, 205, ${0.38 + w * 0.26})`;
-              ctx.lineWidth = 0.92 + w * 0.42;
+              ctx.strokeStyle = `rgba(220, 232, 255, ${0.22 + w * 0.2})`;
+              ctx.lineWidth = 0.85 + w * 0.38;
               ctx.setLineDash([]);
               strokeStadiumRouted(
                 S.x,
@@ -1911,21 +1936,6 @@
                 1250 + si * 19 + hi,
                 lane,
               );
-              ctx.strokeStyle = `rgba(160, 255, 240, ${0.12 + w * 0.1})`;
-              ctx.lineWidth = 0.36;
-              ctx.setLineDash([4, 5]);
-              strokeStadiumRouted(
-                S.x,
-                S.y,
-                H.x,
-                H.y,
-                ellBase,
-                si + 2100,
-                hi + 5100,
-                1300 + si * 23 + hi,
-                0,
-              );
-              ctx.setLineDash([]);
             }
           }
 
@@ -1939,93 +1949,61 @@
             pts.push(toCanvas(project(staticAnchorPoint3(i), t)));
           }
           const n = pts.length;
-          const tang = new Array(n);
+          const keyPairs = [
+            [0, 4],
+            [1, 6],
+            [2, 7],
+            [3, 8],
+            [5, 9],
+          ];
           const rot = (state.pathExtendMul * Math.PI) / 180;
           const cr = Math.cos(rot);
           const sr = Math.sin(rot);
-          const orbR = 6.2 * state.pathHandleMul;
-          const inPts = new Array(n);
-          const outPts = new Array(n);
-          for (let i = 0; i < n; i++) {
-            const prev =
-              i > 0
-                ? pts[i - 1]
-                : {
-                    x: pts[0].x - (pts[1].x - pts[0].x),
-                    y: pts[0].y - (pts[1].y - pts[0].y),
-                  };
-            const next =
-              i < n - 1
-                ? pts[i + 1]
-                : {
-                    x: pts[n - 1].x + (pts[n - 1].x - pts[n - 2].x),
-                    y: pts[n - 1].y + (pts[n - 1].y - pts[n - 2].y),
-                  };
-            const dx = next.x - prev.x;
-            const dy = next.y - prev.y;
-            const m = Math.hypot(dx, dy) || 1;
-            const tx = dx / m;
-            const ty = dy / m;
-            tang[i] = {
-              x: tx * cr - ty * sr,
-              y: tx * sr + ty * cr,
-            };
-            inPts[i] = {
-              x: pts[i].x - tang[i].x * orbR,
-              y: pts[i].y - tang[i].y * orbR,
-            };
-            outPts[i] = {
-              x: pts[i].x + tang[i].x * orbR,
-              y: pts[i].y + tang[i].y * orbR,
-            };
-          }
+
           ctx.save();
           ctx.lineJoin = "round";
           ctx.lineCap = "round";
           ctx.setLineDash([]);
-          ctx.lineWidth = 0.48;
-          ctx.strokeStyle = "rgba(0, 225, 255, 0.22)";
-          if (state.pathThroughPoints) {
+
+          for (let k = 0; k < keyPairs.length; k++) {
+            const aIdx = keyPairs[k][0];
+            const bIdx = keyPairs[k][1];
+            if (aIdx >= n || bIdx >= n || aIdx === bIdx) continue;
+            const A = pts[aIdx];
+            const B = pts[bIdx];
+            const dx = B.x - A.x;
+            const dy = B.y - A.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const ux = dx / len;
+            const uy = dy / len;
+            const nx = -uy;
+            const ny = ux;
+            const bend01 = pairHash01(aIdx, bIdx, 341);
+            const bendSign = pairHash01(aIdx, bIdx, 349) > 0.5 ? 1 : -1;
+            const bendMag =
+              (0.08 + bend01 * 0.16) * len * Math.max(0.35, state.pathFilletMul);
+            const mx = (A.x + B.x) * 0.5;
+            const my = (A.y + B.y) * 0.5;
+            const tx = nx * cr - ny * sr;
+            const ty = nx * sr + ny * cr;
+            const C = {
+              x: mx + tx * bendMag * bendSign,
+              y: my + ty * bendMag * bendSign,
+            };
+            const w = pairHash01(aIdx, bIdx, 355);
+
             ctx.beginPath();
-            ctx.moveTo(inPts[0].x, inPts[0].y);
-            for (let i = 0; i < n; i++) {
-              ctx.lineTo(pts[i].x, pts[i].y);
-              ctx.lineTo(outPts[i].x, outPts[i].y);
-              if (i < n - 1) {
-                if (state.pathFilletMul <= 0) {
-                  ctx.lineTo(inPts[i + 1].x, inPts[i + 1].y);
-                } else {
-                  const dx = inPts[i + 1].x - outPts[i].x;
-                  const dy = inPts[i + 1].y - outPts[i].y;
-                  const d = Math.hypot(dx, dy);
-                  const nx = d > 1e-6 ? -dy / d : 0;
-                  const ny = d > 1e-6 ? dx / d : 0;
-                  const kx =
-                    (outPts[i].x + inPts[i + 1].x) * 0.5 +
-                    nx * d * 0.03 * state.pathFilletMul;
-                  const ky =
-                    (outPts[i].y + inPts[i + 1].y) * 0.5 +
-                    ny * d * 0.03 * state.pathFilletMul;
-                  ctx.quadraticCurveTo(kx, ky, inPts[i + 1].x, inPts[i + 1].y);
-                }
-              }
+            ctx.moveTo(A.x, A.y);
+            if (state.pathThroughPoints) {
+              ctx.quadraticCurveTo(C.x, C.y, B.x, B.y);
+            } else {
+              const h = len * (0.12 + 0.14 * state.pathHandleMul);
+              const cp1 = { x: A.x + ux * h + tx * bendMag * 0.5, y: A.y + uy * h + ty * bendMag * 0.5 };
+              const cp2 = { x: B.x - ux * h + tx * bendMag * 0.5, y: B.y - uy * h + ty * bendMag * 0.5 };
+              ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, B.x, B.y);
             }
-            ctx.stroke();
-          } else {
-            ctx.beginPath();
-            ctx.moveTo(pts[0].x, pts[0].y);
-            for (let i = 0; i < n - 1; i++) {
-              const P = pts[i];
-              const Q = pts[i + 1];
-              const segLen = Math.hypot(Q.x - P.x, Q.y - P.y);
-              const h = segLen * 0.18 * state.pathHandleMul;
-              const cp1 = { x: P.x + tang[i].x * h, y: P.y + tang[i].y * h };
-              const cp2 = {
-                x: Q.x - tang[i + 1].x * h,
-                y: Q.y - tang[i + 1].y * h,
-              };
-              ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, Q.x, Q.y);
-            }
+            ctx.strokeStyle = `rgba(255,255,255,${0.58 + 0.2 * w})`;
+            ctx.lineWidth = 0.95 + 0.55 * w;
             ctx.stroke();
           }
           ctx.restore();
@@ -2040,10 +2018,10 @@
             const c = toCanvas(project(staticAnchorPoint3(i), t));
             ctx.beginPath();
             ctx.arc(c.x, c.y, 3.4, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(255, 130, 70, 0.92)";
+            ctx.fillStyle = "rgba(255, 232, 200, 0.88)";
             ctx.fill();
-            ctx.strokeStyle = "rgba(0, 210, 255, 0.55)";
-            ctx.lineWidth = 1.1;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
+            ctx.lineWidth = 1.05;
             ctx.stroke();
           }
           ctx.restore();
@@ -2063,7 +2041,7 @@
             if (isSel) {
               ctx.beginPath();
               ctx.arc(c.x, c.y, rRing, 0, Math.PI * 2);
-              ctx.strokeStyle = "rgba(0, 210, 255, 0.88)";
+              ctx.strokeStyle = "rgba(220, 235, 255, 0.65)";
               ctx.lineWidth = Math.max(1.2, 1.6 * state.markerSizeMul * 0.7);
               ctx.stroke();
             }
@@ -2171,13 +2149,18 @@
           function markPanelCurve(getUV) {
             const divs = panelDotDivisionsFromDensity();
             if (divs <= 1) return;
-            const r = Math.max(0.42, 1.28 - divs / 700);
+            const cd = 0;
+            const r0 = Math.max(0.42, 1.28 - divs / 700);
             for (let m = 1; m < divs; m++) {
               const tt = m / divs;
               const uv = getUV(tt);
               const c = toCanvas(project(panelSurfacePoint(uv.u, uv.v), tr));
+              const nd = screenCenterBias01Panel(c.x, c.y, cw, ch);
+              const r = r0 * (1 + cd * (1 - nd) * 0.95);
+              const alpha = 0.78 + cd * (1 - nd) * 0.18;
               ctx.beginPath();
               ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(255, 255, 255, " + alpha + ")";
               ctx.fill();
             }
           }
@@ -2273,6 +2256,7 @@
               const seamS = state.panelSeamSeed | 0;
               const curl = 0.48;
               const skip = Math.max(0, Math.min(12, state.panelLinkSkip | 0));
+              const cdTransit = 0;
               const nodes = [];
               for (let ci = 0; ci < panelCurves.length; ci++) {
                 const getUV = panelCurves[ci];
@@ -2295,6 +2279,9 @@
                     sy: s.y,
                     ex: e.x,
                     ey: e.y,
+                    wx: E3.x,
+                    wy: E3.y,
+                    wz: E3.z,
                     isMarker: false,
                   });
                 }
@@ -2305,11 +2292,15 @@
                 return { x: n.ex, y: n.ey };
               }
 
-              const staticScreen = [];
+              const staticAnchors = [];
               for (let sk = 0; sk < STATIC_POINT_UV.length; sk++) {
-                staticScreen.push(
-                  toCanvas(project(staticAnchorPoint3(sk), tr)),
-                );
+                const p3 = staticAnchorPoint3(sk);
+                staticAnchors.push({
+                  x: p3.x,
+                  y: p3.y,
+                  z: p3.z,
+                  s: toCanvas(project(p3, tr)),
+                });
               }
 
               ctx.save();
@@ -2331,19 +2322,17 @@
                 const pA = linkXY(na);
                 let sk = 0;
                 let bestSd = Infinity;
-                for (let k = 0; k < staticScreen.length; k++) {
-                  const sx = staticScreen[k].x;
-                  const sy = staticScreen[k].y;
-                  const dx = pA.x - sx;
-                  const dy = pA.y - sy;
-                  const d = dx * dx + dy * dy;
+                for (let k = 0; k < staticAnchors.length; k++) {
+                  const dx = na.wx - staticAnchors[k].x;
+                  const dy = na.wy - staticAnchors[k].y;
+                  const dz = na.wz - staticAnchors[k].z;
+                  const d = dx * dx + dy * dy + dz * dz;
                   if (d < bestSd) {
                     bestSd = d;
                     sk = k;
                   }
                 }
-                const S = staticScreen[sk];
-
+                const S = staticAnchors[sk].s;
                 let bestJ = -1;
                 let bestD = Infinity;
                 for (let j = 0; j < panelNodeCount; j++) {
@@ -2354,11 +2343,12 @@
                   ) {
                     continue;
                   }
-                  const pB = linkXY(nb);
-                  const dx = pA.x - pB.x;
-                  const dy = pA.y - pB.y;
-                  const d = dx * dx + dy * dy;
+                  const dx = na.wx - nb.wx;
+                  const dy = na.wy - nb.wy;
+                  const dz = na.wz - nb.wz;
+                  const d = dx * dx + dy * dy + dz * dz;
                   if (d < bestD) {
+                    // keep nearest neighbor in object space to avoid screen-space flips while orbiting
                     bestD = d;
                     bestJ = j;
                   }
@@ -2370,9 +2360,11 @@
                   cw,
                   ch,
                 );
-                const baseA1 = 0.2 + 0.18 * (1 - nd1);
+                const baseA1 =
+                  0.2 + (0.18 + cdTransit * 0.12) * (1 - nd1);
                 ctx.strokeStyle = "rgba(210, 240, 255, " + baseA1 + ")";
-                ctx.lineWidth = 0.32 + 0.2 * (1 - nd1);
+                ctx.lineWidth =
+                  0.32 + (0.2 + cdTransit * 0.12) * (1 - nd1);
                 const rex = na.ex - na.sx;
                 const rey = na.ey - na.sy;
                 const rayLen = Math.hypot(rex, rey);
@@ -2396,19 +2388,32 @@
                   ctx.lineTo(j1x, j1y);
                   ctx.stroke();
                 }
-                strokeConnectionWideBezierTangentStart(
-                  j1x,
-                  j1y,
-                  S.x,
-                  S.y,
-                  vrx,
-                  vry,
-                  curl * 0.85,
-                  na.id,
-                  sk + 910000,
-                  seamS,
-                  0.22,
-                );
+                if (cdTransit > 0.12) {
+                  strokePanelStrandStadiumTransit(
+                    { x: j1x, y: j1y },
+                    { x: S.x, y: S.y },
+                    cw,
+                    ch,
+                    cdTransit,
+                    na.id,
+                    sk + 910000,
+                    seamS + 101 * na.id,
+                  );
+                } else {
+                  strokeConnectionWideBezierTangentStart(
+                    j1x,
+                    j1y,
+                    S.x,
+                    S.y,
+                    vrx,
+                    vry,
+                    curl * 0.85,
+                    na.id,
+                    sk + 910000,
+                    seamS,
+                    0.22,
+                  );
+                }
 
                 if (bestJ < 0 || bestD < 1e-8) continue;
                 const b = nodes[bestJ];
@@ -2420,9 +2425,11 @@
                   cw,
                   ch,
                 );
-                const baseA2 = 0.2 + 0.18 * (1 - nd2);
+                const baseA2 =
+                  0.2 + (0.18 + cdTransit * 0.12) * (1 - nd2);
                 ctx.strokeStyle = "rgba(210, 240, 255, " + baseA2 + ")";
-                ctx.lineWidth = 0.32 + 0.2 * (1 - nd2);
+                ctx.lineWidth =
+                  0.32 + (0.2 + cdTransit * 0.12) * (1 - nd2);
                 const sdx = pB.x - S.x;
                 const sdy = pB.y - S.y;
                 const sdl = Math.hypot(sdx, sdy);
@@ -2442,29 +2449,397 @@
                   ctx.lineTo(j2x, j2y);
                   ctx.stroke();
                 }
-                strokeConnectionWideBezierTangentStart(
-                  j2x,
-                  j2y,
-                  pB.x,
-                  pB.y,
-                  vtx,
-                  vty,
-                  curl * 0.85,
-                  sk + 920000,
-                  b.id,
-                  seamS + 3,
-                  0.2,
-                );
+                if (cdTransit > 0.12) {
+                  strokePanelStrandStadiumTransit(
+                    { x: j2x, y: j2y },
+                    { x: pB.x, y: pB.y },
+                    cw,
+                    ch,
+                    cdTransit,
+                    sk + 920000,
+                    b.id,
+                    seamS + 3 + 97 * b.id,
+                  );
+                } else {
+                  strokeConnectionWideBezierTangentStart(
+                    j2x,
+                    j2y,
+                    pB.x,
+                    pB.y,
+                    vtx,
+                    vty,
+                    curl * 0.85,
+                    sk + 920000,
+                    b.id,
+                    seamS + 3,
+                    0.2,
+                  );
+                }
               }
               ctx.restore();
             }
-            ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
             for (let i = 0; i < panelCurves.length; i++) {
               markPanelCurve(panelCurves[i]);
             }
           }
 
           ctx.lineWidth = 1;
+        }
+
+        /**
+         * Central nucleus (Andromeda-only): volumetric 3D dot grid.
+         * Grid extends beyond static-anchor extents, then culls dots inside
+         * an offset sphere around each static anchor.
+         */
+        function drawDataStoreNucleus(toCanvas, tr, cw, ch) {
+          const nStatic = STATIC_POINT_UV.length;
+          if (nStatic < 2) return;
+
+          const modelKey = [
+            state.showVolume ? "volume" : "ellipsoid",
+            state.nucleusGridSpacing.toFixed(4),
+            state.nucleusGridSpacingMode,
+            String(state.nucleusGridQty | 0),
+            state.nucleusOriginTightness.toFixed(4),
+            state.nucleusGridJitter.toFixed(4),
+            state.nucleusCullOffset.toFixed(4),
+          ].join("|");
+          if (!state.nucleusModel || state.nucleusModelKey !== modelKey) {
+            const staticPts = [];
+            let maxAbsX = 0;
+            let maxAbsY = 0;
+            let maxAbsZ = 0;
+            for (let i = 0; i < nStatic; i++) {
+              const p = staticAnchorPoint3(i);
+              staticPts.push(p);
+              maxAbsX = Math.max(maxAbsX, Math.abs(p.x));
+              maxAbsY = Math.max(maxAbsY, Math.abs(p.y));
+              maxAbsZ = Math.max(maxAbsZ, Math.abs(p.z));
+            }
+            const spacing = Math.max(0.005, state.nucleusGridSpacing);
+            const cullR = Math.max(0.05, state.nucleusCullOffset);
+            const tight01 = Math.max(0, Math.min(1, state.nucleusOriginTightness));
+            const jitter01 = Math.max(0, Math.min(1, state.nucleusGridJitter));
+            const gamma = 1 + tight01 * 2.4; // 1=uniform, up to 3.4=center-dense
+            const pad = spacing; // one grid spacing inside static extents
+            const ex = Math.max(spacing * 2, maxAbsX - pad);
+            const ey = Math.max(spacing * 2, maxAbsY - pad);
+            const ez = Math.max(spacing * 2, maxAbsZ - pad);
+            const culledDots = [];
+            const isTri = state.nucleusGridSpacingMode === "triangular";
+            const triYStep = spacing * (Math.sqrt(3) / 2);
+            const maxAxisSamples = 140;
+            const nx = Math.min(maxAxisSamples, Math.max(2, Math.round((ex * 2) / spacing)));
+            const ny = Math.min(
+              maxAxisSamples,
+              Math.max(2, Math.round((ey * 2) / (isTri ? triYStep : spacing))),
+            );
+            const nz = Math.min(maxAxisSamples, Math.max(2, Math.round((ez * 2) / spacing)));
+            function warpAxis(t, extent) {
+              var a = Math.abs(t);
+              var w = Math.pow(a, gamma);
+              return (t < 0 ? -1 : 1) * w * extent;
+            }
+            for (let ix = 0; ix <= nx; ix++) {
+              const tx = (ix / nx) * 2 - 1;
+              const x = warpAxis(tx, ex);
+              for (let iy = 0; iy <= ny; iy++) {
+                const ty = (iy / ny) * 2 - 1;
+                const y = warpAxis(ty, ey);
+                for (let iz = 0; iz <= nz; iz++) {
+                  const tz = (iz / nz) * 2 - 1;
+                  const z = warpAxis(tz, ez);
+                  const triOffset = isTri && ((iy + iz) & 1) ? spacing * 0.5 : 0;
+                  const h0 = pairHash01(ix * 92821 + iy * 68917 + iz * 28387, 17, 4411);
+                  const h1 = pairHash01(ix * 31337 + iy * 27179 + iz * 9973, 19, 4423);
+                  const h2 = pairHash01(ix * 12347 + iy * 8191 + iz * 421, 23, 4441);
+                  const jAmp = spacing * jitter01;
+                  const jx = (h0 * 2 - 1) * jAmp;
+                  const jy = (h1 * 2 - 1) * jAmp;
+                  const jz = (h2 * 2 - 1) * jAmp;
+                  const xTri = x + triOffset + jx;
+                  const yTri = y + jy;
+                  const zTri = z + jz;
+                  let culled = false;
+                  for (let si = 0; si < staticPts.length; si++) {
+                    const sp = staticPts[si];
+                    const dx = xTri - sp.x;
+                    const dy = yTri - sp.y;
+                    const dz = zTri - sp.z;
+                    if (dx * dx + dy * dy + dz * dz <= cullR * cullR) {
+                      culled = true;
+                      break;
+                    }
+                  }
+                  if (culled) continue;
+                  culledDots.push({ x: xTri, y: yTri, z: zTri, row: iy });
+                }
+              }
+            }
+
+            let dots3 = culledDots;
+            if (culledDots.length > state.nucleusGridQty) {
+              const stride = culledDots.length / state.nucleusGridQty;
+              dots3 = [];
+              for (let i = 0; i < state.nucleusGridQty; i++) {
+                dots3.push(culledDots[Math.floor(i * stride)]);
+              }
+            }
+            const targetStatic = new Array(dots3.length);
+            const targetDist = new Array(dots3.length);
+            for (let i = 0; i < dots3.length; i++) {
+              const p = dots3[i];
+              let bestS = 0;
+              let bestD = Infinity;
+              for (let s = 0; s < staticPts.length; s++) {
+                const sp = staticPts[s];
+                const dx = p.x - sp.x;
+                const dy = p.y - sp.y;
+                const dz = p.z - sp.z;
+                const d2 = dx * dx + dy * dy + dz * dz;
+                if (d2 < bestD) {
+                  bestD = d2;
+                  bestS = s;
+                }
+              }
+              targetStatic[i] = bestS;
+              targetDist[i] = Math.sqrt(bestD);
+            }
+
+            const rowToDots = new Map();
+            const rowToY = new Map();
+            for (let i = 0; i < dots3.length; i++) {
+              const r = dots3[i].row | 0;
+              if (!rowToDots.has(r)) rowToDots.set(r, []);
+              rowToDots.get(r).push(i);
+              if (!rowToY.has(r)) rowToY.set(r, dots3[i].y);
+            }
+
+            const staticRow = new Array(staticPts.length);
+            for (let s = 0; s < staticPts.length; s++) {
+              const sy = staticPts[s].y;
+              let bestRow = 0;
+              let bestDy = Infinity;
+              for (const [r, ry] of rowToY.entries()) {
+                const dy = Math.abs(ry - sy);
+                if (dy < bestDy) {
+                  bestDy = dy;
+                  bestRow = r;
+                }
+              }
+              staticRow[s] = bestRow;
+            }
+
+            const parentHop = new Array(dots3.length);
+            const maxHop = spacing * 5.2;
+            const directThresh = spacing * 1.35;
+            for (let i = 0; i < dots3.length; i++) {
+              const p = dots3[i];
+              const ts = targetStatic[i];
+              const dSelf = targetDist[i];
+              if (dSelf <= directThresh) {
+                parentHop[i] = -1; // connect directly to static point
+                continue;
+              }
+              const rowCur = p.row | 0;
+              const rowDst = staticRow[ts] | 0;
+
+              // One vertical move: if off target row, jump once to target row.
+              if (rowCur !== rowDst) {
+                let bestJ = -1;
+                let bestScore = Infinity;
+                const dstDots = rowToDots.get(rowDst) || [];
+                for (let k = 0; k < dstDots.length; k++) {
+                  const j = dstDots[k];
+                  if (j === i) continue;
+                  if (targetStatic[j] !== ts) continue;
+                  const q = dots3[j];
+                  const dx = p.x - q.x;
+                  const dz = p.z - q.z;
+                  const dy = p.y - q.y;
+                  const hop = Math.hypot(dx, dy, dz);
+                  if (hop > maxHop * 1.8) continue;
+                  const dOther = targetDist[j];
+                  const score = Math.abs(dx) + Math.abs(dz) + 0.35 * Math.abs(dy) + dOther * 0.2;
+                  if (score < bestScore) {
+                    bestScore = score;
+                    bestJ = j;
+                  }
+                }
+                parentHop[i] = bestJ >= 0 ? bestJ : -1;
+                continue;
+              }
+
+              // Horizontal-only continuation on target row.
+              const sp = staticPts[ts];
+              const rowDots = rowToDots.get(rowCur) || [];
+              let bestJ = -1;
+              let bestScore = Infinity;
+              const xSelf = Math.abs(p.x - sp.x);
+              for (let k = 0; k < rowDots.length; k++) {
+                const j = rowDots[k];
+                if (j === i) continue;
+                if (targetStatic[j] !== ts) continue;
+                const q = dots3[j];
+                const xOther = Math.abs(q.x - sp.x);
+                if (xOther >= xSelf - 1e-6) continue; // must progress horizontally toward static
+                const dx = p.x - q.x;
+                const dz = p.z - q.z;
+                const hop = Math.hypot(dx, dz);
+                if (hop > maxHop) continue;
+                const score = hop + xOther * 0.12 + Math.abs(q.z - sp.z) * 0.08;
+                if (score < bestScore) {
+                  bestScore = score;
+                  bestJ = j;
+                }
+              }
+              parentHop[i] = bestJ >= 0 ? bestJ : -1;
+            }
+
+            state.nucleusModel = { dots3, targetStatic, parentHop };
+            state.nucleusModelKey = modelKey;
+          }
+
+          const model = state.nucleusModel;
+          if (!model) return;
+          const projection = tr;
+
+          function projectDepth(p) {
+            const x1 = p.x * projection.cy + p.z * projection.sy;
+            const z1 = -p.x * projection.sy + p.z * projection.cy;
+            const y1 = p.y;
+            const y2 = y1 * projection.cp - z1 * projection.sp;
+            const z2 = y1 * projection.sp + z1 * projection.cp;
+            const screen = toCanvas({ x: x1, y: y2 });
+            return { x: screen.x, y: screen.y, z: z2 };
+          }
+
+          ctx.save();
+          const dots2 = [];
+          const static2 = [];
+          for (let i = 0; i < nStatic; i++) {
+            static2.push(projectDepth(staticAnchorPoint3(i)));
+          }
+          for (let i = 0; i < model.dots3.length; i++) {
+            const p2 = projectDepth(model.dots3[i]);
+            dots2.push({ x: p2.x, y: p2.y, z: p2.z, i: i });
+          }
+          dots2.sort(function (a, b) {
+            return a.z - b.z;
+          });
+          const dotByIndex = new Array(model.dots3.length);
+          for (let i = 0; i < dots2.length; i++) {
+            dotByIndex[dots2[i].i] = dots2[i];
+          }
+
+          function strokeElbowFillet(A, B, filletR, bendQty) {
+            const dx = B.x - A.x;
+            const dy = B.y - A.y;
+            if (Math.abs(dx) < 0.8 || Math.abs(dy) < 0.8) {
+              ctx.beginPath();
+              ctx.moveTo(A.x, A.y);
+              ctx.lineTo(B.x, B.y);
+              ctx.stroke();
+              return;
+            }
+            const bends = Math.max(0, Math.min(8, bendQty | 0));
+            if (bends === 0) {
+              ctx.beginPath();
+              ctx.moveTo(A.x, A.y);
+              ctx.lineTo(B.x, B.y);
+              ctx.stroke();
+              return;
+            }
+            const horizFirst = Math.abs(dx) >= Math.abs(dy);
+            const pts = [{ x: A.x, y: A.y }];
+            let curX = A.x;
+            let curY = A.y;
+            for (let bi = 1; bi <= bends; bi++) {
+              const t = bi / (bends + 1);
+              const xT = A.x + dx * t;
+              const yT = A.y + dy * t;
+              const horizStep = horizFirst ? (bi % 2 === 1) : (bi % 2 === 0);
+              if (horizStep) {
+                curX = xT;
+              } else {
+                curY = yT;
+              }
+              pts.push({ x: curX, y: curY });
+            }
+            pts.push({ x: B.x, y: B.y });
+
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length - 1; i++) {
+              const p = pts[i];
+              const n = pts[i + 1];
+              const segA = Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y);
+              const segB = Math.hypot(n.x - p.x, n.y - p.y);
+              const r = Math.min(
+                filletR,
+                Math.max(0.7, Math.min(segA, segB) * 0.42),
+              );
+              ctx.arcTo(p.x, p.y, n.x, n.y, r);
+            }
+            ctx.lineTo(B.x, B.y);
+            ctx.stroke();
+          }
+
+          const baseR = Math.max(0.45, 0.5 * 2.1 * state.markerSizeMul * state.nucleusDotSizeMul);
+          const baseA = Math.max(0.05, Math.min(1, state.nucleusDotOpacity));
+          const span = Math.max(1e-6, Math.max(AX, BY, CZ));
+
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          for (let i = 0; i < model.parentHop.length; i++) {
+            const A = dotByIndex[i];
+            if (!A) continue;
+            const staticTarget = static2[model.targetStatic[i] || 0];
+            const parent = model.parentHop[i];
+            const B =
+              state.nucleusHomeRunMode
+                ? staticTarget
+                : (parent >= 0 ? dotByIndex[parent] : staticTarget);
+            if (!B) continue;
+            const dx = B.x - A.x;
+            const dy = B.y - A.y;
+            const len = Math.hypot(dx, dy);
+            if (len < 1.5) continue;
+            const depth01 = 0.5 + 0.5 * (A.z / span);
+            const alpha = baseA * (state.nucleusHomeRunMode ? 0.12 : (0.09 + 0.19 * depth01));
+            ctx.strokeStyle = `rgba(224,236,255,${alpha})`;
+            ctx.lineWidth = state.nucleusHomeRunMode
+              ? 0.32 + 0.18 * depth01
+              : 0.38 + 0.3 * depth01;
+            if (state.nucleusHomeRunMode) {
+              ctx.beginPath();
+              ctx.moveTo(A.x, A.y);
+              ctx.lineTo(B.x, B.y);
+              ctx.stroke();
+            } else {
+              strokeElbowFillet(
+                A,
+                B,
+                2.8 + 3.4 * state.pathFilletMul,
+                state.nucleusBendQty,
+              );
+            }
+          }
+
+          for (let i = 0; i < dots2.length; i++) {
+            const d = dots2[i];
+            const depth01 = 0.5 + 0.5 * (d.z / span);
+            const r = baseR * (0.72 + 0.62 * depth01);
+            const a = baseA * (0.45 + 0.55 * depth01);
+            ctx.fillStyle = `rgba(246, 250, 255, ${a})`;
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = `rgba(255,255,255,${Math.min(0.55, a * 0.7)})`;
+            ctx.lineWidth = Math.max(0.22, r * 0.2);
+            ctx.stroke();
+          }
+          ctx.restore();
         }
 
         function canvasCssSize() {
@@ -2487,7 +2862,7 @@
 
           if (state.showSolidGeometry) {
             if (state.showVolume) {
-              ctx.strokeStyle = "rgba(0, 210, 255, 0.22)";
+              ctx.strokeStyle = "rgba(200, 220, 245, 0.2)";
               drawVolumeGrid(toCanvas, t);
             } else {
               drawEllipsoidSolidGeometry(toCanvas, t);
@@ -2502,10 +2877,9 @@
             drawEllipsoidWireframe(toCanvas, t);
           }
 
-          if (state.showPaths) {
-            drawTrustZoneCore(toCanvas, t);
-            drawFixedPaths(toCanvas, t);
-          }
+          drawDataStoreNucleus(toCanvas, t, cw, ch);
+
+          // Andromeda: pathfinder paths intentionally disabled.
 
           if (state.showStaticVolumePoints) {
             drawStaticVolumePoints(toCanvas, t);
@@ -2577,6 +2951,7 @@
           try {
             canvas.releasePointerCapture(e.pointerId);
           } catch (_) {}
+          frame();
         }
 
         function onWheel(e) {
@@ -2653,6 +3028,7 @@
           panelDotDensityInput.disabled = !state.showPanelDots;
           panelSeamSeedInput.disabled = !panelOn;
           panelLinkSkipInput.disabled = !state.showPanelDots;
+          panelTransitSpineInput.disabled = !state.showPanelDots;
           btnPanelSeamReseed.disabled = !panelOn;
         }
 
@@ -2748,6 +3124,8 @@
         solidModeEllipsoid.addEventListener("change", function () {
           if (!solidModeEllipsoid.checked) return;
           state.showVolume = false;
+          state.nucleusModel = null;
+          state.nucleusModelKey = "";
           syncVolumeControlsFromState();
           frame();
         });
@@ -2755,6 +3133,8 @@
         solidModeVolume.addEventListener("change", function () {
           if (!solidModeVolume.checked) return;
           state.showVolume = true;
+          state.nucleusModel = null;
+          state.nucleusModelKey = "";
           syncVolumeControlsFromState();
           frame();
         });
@@ -2798,6 +3178,8 @@
           state.panelLineDash = Number(panelLineDashInput.value);
           panelLineVal.textContent =
             state.panelLineDash <= 0 ? "solid" : String(state.panelLineDash);
+          state.panelTransitSpine = Number(panelTransitSpineInput.value);
+          panelTransitSpineVal.textContent = String(state.panelTransitSpine);
         }
 
         function reseedPanelSeams() {
@@ -2835,6 +3217,50 @@
           const rotDeg = Number(pathExtendInput.value);
           state.pathExtendMul = Math.max(0, Math.min(360, rotDeg));
           pathExtendVal.textContent = Math.round(state.pathExtendMul) + "°";
+
+          const spacingPct = Number(nucleusGridSpacingInput.value);
+          state.nucleusGridSpacing = Math.max(0.005, Math.min(1.0, spacingPct / 1000));
+          nucleusGridSpacingVal.textContent = state.nucleusGridSpacing.toFixed(3);
+          state.nucleusGridSpacingMode = nucleusGridSpacingTriInput.checked
+            ? "triangular"
+            : "square";
+
+          state.nucleusGridQty = Math.max(500, Math.min(8000, Number(nucleusGridQtyInput.value) | 0));
+          nucleusGridQtyVal.textContent = String(state.nucleusGridQty);
+
+          const tightPct = Number(nucleusOriginTightnessInput.value);
+          state.nucleusOriginTightness = Math.max(0, Math.min(1, tightPct / 100));
+          nucleusOriginTightnessVal.textContent = Math.round(tightPct) + "%";
+
+          const jitterPct = Number(nucleusGridJitterInput.value);
+          state.nucleusGridJitter = Math.max(0, Math.min(1, jitterPct / 100));
+          nucleusGridJitterVal.textContent = Math.round(jitterPct) + "%";
+
+          const cullPct = Number(nucleusCullOffsetInput.value);
+          state.nucleusCullOffset = Math.max(0.1, Math.min(2.2, cullPct / 100));
+          nucleusCullOffsetVal.textContent = state.nucleusCullOffset.toFixed(2);
+
+          const dotSizePct = Number(nucleusDotSizeInput.value);
+          state.nucleusDotSizeMul = Math.max(0.4, Math.min(2.2, dotSizePct / 100));
+          nucleusDotSizeVal.textContent = state.nucleusDotSizeMul.toFixed(2) + "x";
+
+          const dotOpacityPct = Number(nucleusDotOpacityInput.value);
+          state.nucleusDotOpacity = Math.max(0.15, Math.min(1, dotOpacityPct / 100));
+          nucleusDotOpacityVal.textContent = Math.round(dotOpacityPct) + "%";
+          state.nucleusHomeRunMode = !!nucleusHomeRunModeInput.checked;
+          if (state.nucleusHomeRunMode) {
+            state.nucleusBendQty = 0;
+            nucleusBendQtyInput.value = "0";
+            nucleusBendQtyInput.disabled = true;
+            nucleusBendQtyVal.textContent = "0 (forced)";
+          } else {
+            nucleusBendQtyInput.disabled = false;
+            state.nucleusBendQty = Math.max(0, Math.min(8, Number(nucleusBendQtyInput.value) | 0));
+            nucleusBendQtyVal.textContent = String(state.nucleusBendQty);
+          }
+
+          state.nucleusModel = null;
+          state.nucleusModelKey = "";
         }
 
         panelTightnessInput.addEventListener("input", function () {
@@ -2872,6 +3298,11 @@
           frame();
         });
 
+        panelTransitSpineInput.addEventListener("input", function () {
+          readPanelControlsFromInputs();
+          frame();
+        });
+
         meshOpacityInput.addEventListener("input", function () {
           readMeshOpacityFromInput();
           frame();
@@ -2894,6 +3325,51 @@
           frame();
         });
         pathExtendInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+
+        nucleusGridSpacingInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusGridSpacingSquareInput.addEventListener("change", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusGridSpacingTriInput.addEventListener("change", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusGridQtyInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusOriginTightnessInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusGridJitterInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusCullOffsetInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusDotSizeInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusDotOpacityInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusBendQtyInput.addEventListener("input", function () {
+          readPathfinderControlsFromInputs();
+          frame();
+        });
+        nucleusHomeRunModeInput.addEventListener("change", function () {
           readPathfinderControlsFromInputs();
           frame();
         });
@@ -3016,6 +3492,7 @@
         }
       })();
     </script>
+    <script src="canvas-nav.js"></script>
     <script src="embed-bridge.js"></script>
   </body>
 </html>

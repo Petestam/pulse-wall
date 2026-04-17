@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Strand & ellipsoid · contact sheet</title>
+    <title>Coma Berenices · preview grid · Pulse</title>
+    <link rel="stylesheet" href="canvas-chrome.css" />
     <style>
       * {
         box-sizing: border-box;
@@ -30,60 +31,101 @@
         padding: 10px 10px 6px;
         min-height: 0;
       }
+      /*
+       * Each preview matches embedded files’ 12×5 canvas: iframe size = cell size = viewport-12x5
+       * (no letterboxing inside the iframe). Three equal rows of two 12×5 cells → height = W·5/8.
+       */
       .contact-grid {
         display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        grid-template-rows: repeat(5, 1fr);
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto auto;
+        align-items: start;
         gap: 4px;
-        width: min(100vw - 20px, calc((100vh - 320px) * 12 / 5));
-        height: min(calc((100vw - 20px) * 5 / 12), 100vh - 320px);
-        max-height: calc(100vh - 320px);
+        width: min(100vw - 20px, calc((100vh - 320px) * 8 / 5));
+        max-width: 100%;
+        margin: 0 auto;
         background: rgba(255, 255, 255, 0.06);
         border-radius: 3px;
         padding: 4px;
       }
       .cell {
         position: relative;
+        width: 100%;
+        aspect-ratio: 12 / 5;
         min-height: 0;
-        min-width: 0;
-        background: #000;
+        background: rgb(7, 24, 45);
         border-radius: 2px;
         overflow: hidden;
       }
       .cell--classic {
-        grid-column: 1 / span 6;
-        grid-row: 1 / span 2;
+        grid-column: 1;
+        grid-row: 1;
       }
       .cell--field {
-        grid-column: 7 / span 6;
-        grid-row: 1 / span 2;
+        grid-column: 2;
+        grid-row: 1;
       }
       .cell--grad {
-        grid-column: 1 / span 6;
-        grid-row: 3 / span 3;
+        grid-column: 1;
+        grid-row: 2;
       }
       .cell--fabric {
-        grid-column: 7 / span 6;
-        grid-row: 3 / span 3;
+        grid-column: 2;
+        grid-row: 2;
       }
+      .cell--generative-main {
+        grid-column: 1;
+        grid-row: 3;
+      }
+      .cell--topology {
+        grid-column: 2;
+        grid-row: 3;
+      }
+      /* Iframe must sit below the chrome strip or it wins hit-testing over the whole cell. */
       .cell iframe {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
         display: block;
         width: 100%;
         height: 100%;
         border: 0;
       }
-      .cell__label {
+      .cell__chrome {
         position: absolute;
-        top: 6px;
-        left: 8px;
-        z-index: 3;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 8px;
+        min-height: 28px;
+      }
+      .cell__label {
         font-size: 9px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         color: rgba(160, 218, 255, 0.9);
         text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
-        pointer-events: none;
+      }
+      .cell__fullview {
+        position: relative;
+        z-index: 2;
+        flex-shrink: 0;
+        font-size: 9px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: rgba(0, 210, 255, 0.65);
+        text-decoration: none;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+      }
+      .cell__fullview:hover {
+        color: rgba(255, 170, 60, 0.95);
       }
       .dock {
         flex-shrink: 0;
@@ -247,26 +289,61 @@
         align-items: center;
         margin-top: 6px;
       }
+      .dock__row--nav {
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 8px;
+        margin-top: 2px;
+      }
     </style>
   </head>
-  <body>
+  <body data-pulse-page="coma-berenices">
     <div class="stage-wrap">
-      <div class="contact-grid" aria-label="12 by 5 layout · four live previews">
+      <div class="contact-grid" aria-label="2×3 preview grid · six 12×5 tiles">
         <div class="cell cell--classic">
-          <span class="cell__label">Strand · classic</span>
-          <iframe title="Classic strand field" src="generative.html?embed=1"></iframe>
+          <iframe title="Orion — strand classic routing" src="orion.html?embed=1&sharedDotGrid=1"></iframe>
+          <div class="cell__chrome">
+            <span class="cell__label">Orion · classic routing</span>
+            <a class="cell__fullview" href="orion.html">Full view</a>
+          </div>
         </div>
         <div class="cell cell--field">
-          <span class="cell__label">Strand · floating field</span>
-          <iframe title="Floating field" src="generative-field.html?embed=1"></iframe>
+          <iframe title="Eridanus — strand floating field" src="eridanus.html?embed=1&sharedDotGrid=1"></iframe>
+          <div class="cell__chrome">
+            <span class="cell__label">Eridanus · floating field</span>
+            <a class="cell__fullview" href="eridanus.html">Full view</a>
+          </div>
         </div>
         <div class="cell cell--grad">
-          <span class="cell__label">Ellipsoid · gradient</span>
-          <iframe title="Blue gradient ellipsoid" src="blank-gradient.html?embed=1"></iframe>
+          <iframe title="Andromeda — ellipsoid gradient" src="andromeda.html?embed=1&sharedDotGrid=1"></iframe>
+          <div class="cell__chrome">
+            <span class="cell__label">Andromeda · gradient</span>
+            <a class="cell__fullview" href="andromeda.html">Full view</a>
+          </div>
         </div>
         <div class="cell cell--fabric">
-          <span class="cell__label">Ellipsoid · fabric traces</span>
-          <iframe title="Fabric network" src="blank-gradient-fabric.html?embed=1"></iframe>
+          <iframe title="Reticulum — ellipsoid fabric" src="reticulum.html?embed=1&sharedDotGrid=1"></iframe>
+          <div class="cell__chrome">
+            <span class="cell__label">Reticulum · fabric traces</span>
+            <a class="cell__fullview" href="reticulum.html">Full view</a>
+          </div>
+        </div>
+        <div class="cell cell--generative-main">
+          <iframe title="Perseus — generative main (radial / comet)" src="perseus.html?embed=1&sharedDotGrid=1"></iframe>
+          <div class="cell__chrome">
+            <span class="cell__label">Perseus · generative (main)</span>
+            <a class="cell__fullview" href="perseus.html">Full view</a>
+          </div>
+        </div>
+        <div class="cell cell--topology">
+          <iframe
+            title="Ophiuchus — topology editor (data field)"
+            src="ophiuchus.html?embed=1&sharedDotGrid=1"
+          ></iframe>
+          <div class="cell__chrome">
+            <span class="cell__label">Ophiuchus · topology editor</span>
+            <a class="cell__fullview" href="ophiuchus.html">Full view</a>
+          </div>
         </div>
       </div>
     </div>
@@ -281,7 +358,24 @@
         <span class="sep">|</span>
         <span style="font-size:10px;color:rgba(200,220,240,0.5);letter-spacing:0.08em;">ELLIPSOID</span>
         <button type="button" id="dock-ellipsoid-reset" title="Reset camera · 12×5 front">Reset 12×5</button>
-        <a class="dock-link" href="index.html">Topology editor</a>
+      </div>
+      <div class="dock__row dock__row--nav">
+        <nav class="chrome-nav" aria-label="Pulse canvas views">
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="orion" href="orion.html">Orion · classic</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="eridanus" href="eridanus.html">Eridanus · field</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="andromeda" href="andromeda.html">Andromeda · gradient</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="reticulum" href="reticulum.html">Reticulum · fabric</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="perseus" href="perseus.html">Perseus · generative</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="coma-berenices" href="coma-berenices.html">Coma Berenices · grid</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="ophiuchus" href="ophiuchus.html">Ophiuchus · topology</a>
+        </nav>
       </div>
       <div class="dock__row">
         <div class="scenario-strip__buttons" id="scenario-buttons"></div>
@@ -295,12 +389,17 @@
         <div class="tune-grid" id="tune-grid"></div>
       </details>
 
+      <details class="dock-block" id="dotgrid-master" open>
+        <summary>Dot grid · master (all embedded canvases)</summary>
+        <div class="tune-grid" id="dotgrid-master-grid"></div>
+      </details>
+
       <details class="dock-block" id="ellipsoid-details" open>
         <summary>Ellipsoid · controls (PulseModalRegistry — posts to each embedded page by ID)</summary>
         <p class="hint" style="margin-top:6px">
           Sliders and toggles post to <strong>both</strong> embedded pages when IDs exist. Tags:
           <span class="tag" style="color:rgba(255,170,60,0.75)">gradient</span> =
-          <code>blank-gradient.html</code> only ·
+          <code>andromeda.html</code> only ·
           <span class="tag" style="color:rgba(120,200,255,0.75)">fabric</span> =
           fabric build only.
         </p>
@@ -308,7 +407,8 @@
       </details>
     </div>
 
+    <script src="canvas-nav.js"></script>
     <script src="shared-modal-registry.js"></script>
-    <script src="contact-sheet-dock.js"></script>
+    <script src="coma-berenices-dock.js"></script>
   </body>
 </html>

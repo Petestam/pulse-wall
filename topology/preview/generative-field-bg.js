@@ -1,13 +1,14 @@
 /**
- * Floating blue field + warped dot grid — shared by generative-field view.
+ * Floating blue field + warped dot grid — shared by Eridanus (eridanus.html) view.
  * Exposes window.GenerativeFieldBg for generative.js integration.
  */
 (function () {
   "use strict";
 
+  // Background blend target: 80% Cisco Midnight Blue, 10% Medium Blue, 10% Cisco Blue.
   const BG_DEEP = [3, 16, 52];
-  const BG_MID = [14, 84, 188];
-  const BG_ANCHOR = [6, 42, 108];
+  const BG_MID = [12, 128, 255];
+  const BG_ANCHOR = [7, 24, 45];
 
   const FLOAT_PALETTE = [
     [110, 210, 255],

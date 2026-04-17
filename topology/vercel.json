@@ -2,7 +2,7 @@
   "redirects": [
     {
       "source": "/",
-      "destination": "/preview/",
+      "destination": "/preview/coma-berenices.html",
       "permanent": false
     }
   ]

@@ -1,7 +1,7 @@
 /**
- * Shared modal / control definitions for strand (generative + contact sheet) and ellipsoid (contact sheet).
+ * Shared modal / control definitions for strand (canvas + preview grid) and ellipsoid (preview grid).
  * Single source of truth: generative.js builds “Tune Flow” from STRAND_FLOW_MODAL_ROWS;
- * contact-sheet dock uses STRAND_CONTACT_SLIDERS + ELLIPSOID_CONTROL_SECTIONS.
+ * Coma Berenices grid dock uses STRAND_CONTACT_SLIDERS + ELLIPSOID_CONTROL_SECTIONS.
  */
 (function (global) {
   "use strict";
@@ -12,12 +12,12 @@
   var DEFAULT_FLOW_TUNE = {
     arcJitter: 0.45,
     arcInconsistency: 0.52,
-    strandSpread: 1.35,
-    strandInstances: 1.45,
+    strandSpread: 10,
+    strandInstances: 1,
     orbSpeed: 7.0,
     orbGlowDistance: 6.0,
     bendFillet: 8.0,
-    bendQuantity: 2.0,
+    bendQuantity: 3,
     fieldHighwayStrands: 8,
     tweenQty: 4,
     tweenJitter: 10,
@@ -141,7 +141,7 @@
       fields: [
         { t: "checkbox", id: "chk-markers-show", label: "Show vertex markers", c: true },
         { t: "range", id: "marker-count", label: "Marker count", min: 0, max: 2016, step: 1, v: 50 },
-        { t: "range", id: "marker-size", label: "Dot size", min: 50, max: 500, step: 5, v: 300 },
+        { t: "range", id: "marker-size", label: "Dot size", min: 50, max: 500, step: 5, v: 175 },
       ],
     },
     {
@@ -182,12 +182,12 @@
   function applyFlowTuneReset(isField, flowTune, scene3d) {
     flowTune.arcJitter = 0.45;
     flowTune.arcInconsistency = 0.52;
-    flowTune.strandSpread = 1.35;
-    flowTune.strandInstances = isField ? 1 : 1.45;
+    flowTune.strandSpread = 10;
+    flowTune.strandInstances = 1;
     flowTune.orbSpeed = 7.0;
     flowTune.orbGlowDistance = 6.0;
     flowTune.bendFillet = 8.0;
-    flowTune.bendQuantity = 2.0;
+    flowTune.bendQuantity = 3;
     if (isField) {
       flowTune.fieldHighwayStrands = 8;
       flowTune.tweenQty = 4;

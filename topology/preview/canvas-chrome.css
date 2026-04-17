@@ -1,0 +1,611 @@
+/**
+ * Unified chrome for Pulse strand + ellipsoid canvas pages.
+ * Load after any page-local reset (* { box-sizing }) if needed.
+ */
+:root {
+  --pulse-chrome-border: rgba(0, 210, 255, 0.35);
+  --pulse-chrome-border-hover: rgba(255, 170, 60, 0.55);
+  --pulse-chrome-border-active: rgba(0, 210, 255, 0.75);
+  --pulse-chrome-bg: rgba(3, 8, 20, 0.82);
+  --pulse-chrome-bg-pop: rgba(5, 10, 31, 0.94);
+  --pulse-chrome-text: rgba(230, 248, 255, 0.92);
+  --pulse-chrome-glow: rgba(0, 185, 255, 0.35);
+  --pulse-accent: rgba(0, 210, 255, 0.75);
+}
+
+/* ─── Bottom toolbar ─── */
+.chrome {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  font-size: 12px;
+}
+
+.chrome button {
+  border: 1px solid var(--pulse-chrome-border);
+  background: var(--pulse-chrome-bg);
+  color: var(--pulse-chrome-text);
+  padding: 8px 14px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.chrome button:hover {
+  border-color: var(--pulse-chrome-border-hover);
+  color: #fff;
+}
+
+.chrome button.is-active {
+  border-color: var(--pulse-chrome-border-active);
+  box-shadow: 0 0 14px var(--pulse-chrome-glow);
+  color: #f4fbff;
+}
+
+.chrome .sep {
+  color: rgba(255, 255, 255, 0.28);
+  user-select: none;
+}
+
+.chrome a:not(.chrome-nav__link) {
+  color: rgba(0, 210, 255, 0.65);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.chrome a:not(.chrome-nav__link):hover {
+  color: rgba(255, 170, 60, 0.9);
+}
+
+/* Cross-page nav (same links on strand + ellipsoid) */
+.chrome-nav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 2px;
+}
+
+.chrome-nav .sep {
+  margin: 0 2px;
+}
+
+.chrome-nav__link {
+  color: rgba(0, 210, 255, 0.55) !important;
+  font-size: 11px !important;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+.chrome-nav__link:hover {
+  color: rgba(255, 170, 60, 0.95) !important;
+}
+
+.chrome-nav__link[aria-current="page"] {
+  color: rgba(230, 248, 255, 0.95) !important;
+  border: 1px solid rgba(0, 210, 255, 0.45);
+  background: rgba(3, 12, 28, 0.65);
+  pointer-events: none;
+  cursor: default;
+}
+
+/* ─── 12×5 wall tile (same math as preview grid + topology SVG) ─── */
+.viewport-stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.viewport-stage--above-bg {
+  z-index: 1;
+}
+.viewport-12x5 {
+  pointer-events: auto;
+  position: relative;
+  width: min(100vw, calc(100vh * 12 / 5));
+  height: min(100vh, calc(100vw * 5 / 12));
+  flex-shrink: 0;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.viewport-12x5 > canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * Preview grid embed (?embed=1): parent sizes the iframe to 12×5 — stretch the stage canvas
+ * to the full iframe so it matches the cell (avoids min(100vw,…) letterboxing).
+ */
+html.generative-embed .viewport-stage,
+body.embed-contact .viewport-stage {
+  align-items: stretch;
+  justify-content: stretch;
+}
+html.generative-embed .viewport-stage .viewport-12x5,
+body.embed-contact .viewport-stage .viewport-12x5 {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  max-width: none;
+  max-height: none;
+}
+
+/* Ellipsoid tool popovers */
+.chrome-bg-ctrl {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-left: 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.chrome-bg-ctrl label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chrome-bg-ctrl input[type="range"] {
+  width: 84px;
+  vertical-align: middle;
+  accent-color: var(--pulse-accent);
+}
+
+.chrome-bg-ctrl__val {
+  min-width: 1.75em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.chrome-tools {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.chrome-tool {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.chrome-tool__pop {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: 4;
+  margin-bottom: 6px;
+  min-width: 212px;
+  padding: 10px 12px;
+  background: var(--pulse-chrome-bg-pop);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.4);
+  color: rgba(230, 248, 255, 0.9);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0;
+  visibility: hidden;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease,
+    max-height 0.22s ease,
+    visibility 0.18s;
+}
+
+.chrome-tool.chrome-tool--open .chrome-tool__pop {
+  opacity: 1;
+  visibility: visible;
+  max-height: min(85vh, 720px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 210, 255, 0.35) transparent;
+  pointer-events: auto;
+}
+
+.chrome-tool.chrome-tool--open .chrome-tool__pop::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chrome-tool.chrome-tool--open .chrome-tool__pop::-webkit-scrollbar-thumb {
+  background: rgba(0, 210, 255, 0.35);
+  border-radius: 3px;
+}
+
+.chrome-tool__pop button.chrome-tool__reseed {
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 10px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(5, 10, 31, 0.55);
+  color: rgba(230, 248, 255, 0.9);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.chrome-tool__pop button.chrome-tool__reseed:hover {
+  border-color: rgba(0, 210, 255, 0.45);
+  color: #fff;
+}
+
+.chrome-tool__pop label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chrome-tool__pop label + label {
+  margin-top: 10px;
+}
+
+.chrome-tool__pop .slide-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chrome-tool__pop .slide-val {
+  flex-shrink: 0;
+  min-width: 3em;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chrome-tool__pop .chrome-tool__subhead {
+  margin: 0 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(0, 210, 255, 0.55);
+}
+
+.chrome-tool__pop .chrome-tool__subhead:not(:first-child) {
+  margin-top: 12px;
+}
+
+.chrome-tool__pop .chrome-tool__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.chrome-tool__pop .chrome-tool__toggles label {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: 0.03em;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.chrome-tool__pop .chrome-tool__toggles input {
+  accent-color: var(--pulse-accent);
+}
+
+.chrome-tool__pop input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--pulse-accent);
+}
+
+.chrome-tool__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chrome-tool__val {
+  flex-shrink: 0;
+  min-width: 2.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+}
+
+/* Strand scenario strip */
+.scenario-strip {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 62px;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.scenario-strip__title {
+  margin-bottom: 6px;
+  color: rgba(160, 218, 255, 0.88);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.scenario-strip__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scenario-btn {
+  border: 1px solid rgba(0, 210, 255, 0.25);
+  background: rgba(3, 8, 20, 0.62);
+  color: rgba(195, 232, 255, 0.85);
+  padding: 5px 8px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.scenario-btn:hover {
+  border-color: rgba(255, 170, 60, 0.45);
+}
+
+.scenario-btn.is-active {
+  border-color: rgba(0, 210, 255, 0.72);
+  box-shadow: 0 0 18px rgba(0, 185, 255, 0.35);
+  color: #f3fbff;
+}
+
+/* Strand “Tune Flow” panel (generative.js) */
+.flow-tune-toggle {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 50;
+  border: 1px solid var(--pulse-chrome-border);
+  background: var(--pulse-chrome-bg);
+  color: rgba(200, 230, 255, 0.88);
+  padding: 7px 10px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.flow-tune-toggle:hover {
+  border-color: var(--pulse-chrome-border-hover);
+  color: #fff;
+}
+
+.flow-tune-modal {
+  position: fixed;
+  right: 14px;
+  bottom: 48px;
+  width: min(300px, 82vw);
+  z-index: 50;
+  border: 1px solid rgba(0, 210, 255, 0.22);
+  background: rgba(3, 10, 24, 0.96);
+  color: rgba(220, 235, 255, 0.9);
+  border-radius: 4px;
+  padding: 10px 10px 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.flow-tune-modal[hidden] {
+  display: none;
+}
+
+.flow-tune-title {
+  margin: 0 0 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(0, 210, 255, 0.75);
+}
+
+.flow-tune-row {
+  margin-bottom: 8px;
+}
+
+.flow-tune-row label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  margin-bottom: 3px;
+}
+
+.flow-tune-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--pulse-accent);
+}
+
+.flow-tune-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.flow-tune-actions button {
+  border: 1px solid rgba(0, 210, 255, 0.28);
+  background: rgba(5, 14, 28, 0.9);
+  color: rgba(230, 248, 255, 0.92);
+  padding: 5px 8px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.flow-tune-actions button:hover {
+  border-color: var(--pulse-chrome-border-hover);
+}
+
+/* Shared faint dot grid (Tune Flow + ellipsoid chrome) */
+.flow-tune-dotgrid {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 210, 255, 0.14);
+}
+
+.flow-tune-dotgrid__summary {
+  cursor: pointer;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(160, 218, 255, 0.88);
+  list-style: none;
+}
+
+.flow-tune-dotgrid__summary::-webkit-details-marker {
+  display: none;
+}
+
+.flow-tune-dotgrid__body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flow-tune-dotgrid__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.flow-tune-dotgrid__spacing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 10px;
+}
+
+.flow-tune-dotgrid__spacing label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0.03em;
+}
+
+.flow-tune-dotgrid__label {
+  width: 100%;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(180, 210, 240, 0.55);
+}
+
+.flow-tune-dotgrid__row input[type="range"] {
+  width: 100%;
+}
+
+.chrome-dotgrid-details {
+  margin: 6px 0 0;
+  padding: 6px 8px 8px;
+  border: 1px solid rgba(0, 210, 255, 0.16);
+  border-radius: 3px;
+  background: rgba(3, 10, 22, 0.45);
+  max-width: min(320px, 92vw);
+}
+
+.chrome-dotgrid-summary {
+  cursor: pointer;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(160, 218, 255, 0.9);
+  list-style: none;
+}
+
+.chrome-dotgrid-summary::-webkit-details-marker {
+  display: none;
+}
+
+.chrome-dotgrid-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.chrome-dotgrid-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.chrome-dotgrid-spacing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.chrome-dotgrid-spacing label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.chrome-dotgrid-label {
+  width: 100%;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(180, 210, 240, 0.55);
+}
+
+.chrome-dotgrid-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.chrome-dotgrid-row input[type="range"] {
+  flex: 1;
+  min-width: 120px;
+  accent-color: var(--pulse-accent);
+}

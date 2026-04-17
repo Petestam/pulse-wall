@@ -7,7 +7,7 @@
   const canvas = document.getElementById("viz");
   const ctx = canvas.getContext("2d", { alpha: false });
 
-  /** When true (generative-field.html), use floating blue field + warped grid; particles replace curtain strands. */
+  /** When true (eridanus.html), use floating blue field + warped grid; particles replace curtain strands. */
   const IS_FIELD =
     typeof window !== "undefined" && window.__GENERATIVE_FIELD__;
   /** Contact sheet / embedded iframe: hide local chrome; control from parent via postMessage + shared flow tune storage. */
@@ -21,9 +21,10 @@
   /* ═══════════════════════════════════════════════════════
    * SPEC-DERIVED CONSTANTS  (Pulse Wall Visual System V3)
    * ═══════════════════════════════════════════════════════ */
-  const BG            = [6, 42, 108];      // Cisco-midnight field anchor
+  // Background blend target: 80% Cisco Midnight Blue, 10% Medium Blue, 10% Cisco Blue.
+  const BG            = [7, 24, 45];
   const BG_DEEP       = [3, 16, 52];
-  const BG_MID        = [14, 84, 188];
+  const BG_MID        = [12, 128, 255];
   const STRAND_NEUTRAL = [220, 230, 244];  // light strands over blue field
   const NODE_FILL     = [236, 244, 255];   // near-white node dots
 
@@ -77,8 +78,8 @@
   const flowTune = {
     arcJitter:        0.45,
     arcInconsistency: 0.52,
-    strandSpread:     1.35,
-    strandInstances:  1.45,
+    strandSpread:     10,
+    strandInstances:  1,
     /** Floating-field view only: max parallel strokes per highway edge (1–8). */
     fieldHighwayStrands: 8,
     /** Tween depth dots (0–20): floor(qty/4) → 0–5 dots per gap; 0 = off. */
@@ -90,7 +91,7 @@
     orbSpeed:         7.0,
     orbGlowDistance:  6.0,
     bendFillet:       8.0,
-    bendQuantity:     2.0,
+    bendQuantity:     3,
   };
   const scene3d = {
     yaw:        0,
@@ -264,8 +265,9 @@
    * ═══════════════════════════════════════════════════════ */
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width || window.innerWidth || 1));
+    const h = Math.max(1, Math.round(rect.height || window.innerHeight || 1));
     canvas.width  = Math.floor(w * dpr);
     canvas.height = Math.floor(h * dpr);
     canvas.style.width  = `${w}px`;
@@ -304,7 +306,7 @@
 
   function mapPipePoint(n, w, h, view) {
     const vw = view?.width || 120;
-    const vh = view?.height || 60;
+    const vh = view?.height || 50;
     const marginX = w * 0.11;
     const marginY = h * 0.12;
     const innerW = w - marginX * 2;
@@ -334,7 +336,7 @@
 
   function mapViewToCanvas(vx, vy, w, h, view) {
     const vw = view?.width || 120;
-    const vh = view?.height || 60;
+    const vh = view?.height || 50;
     const marginX = w * 0.11;
     const marginY = h * 0.12;
     return {
@@ -369,26 +371,27 @@
   /* ═══════════════════════════════════════════════════════
    * PERSISTENCE  (flow tune + 3D params)
    * ═══════════════════════════════════════════════════════ */
-  function loadFlowTune() {
-    try {
-      const raw = localStorage.getItem(FLOW_TUNE_KEY);
-      if (!raw) return;
-      const x = JSON.parse(raw);
-      if (!x || typeof x !== "object") return;
-      if (typeof x.arcJitter === "number")        flowTune.arcJitter = clamp(x.arcJitter, 0, 20);
-      if (typeof x.arcInconsistency === "number") flowTune.arcInconsistency = clamp(x.arcInconsistency, 0, 20);
-      if (typeof x.strandSpread === "number")     flowTune.strandSpread = clamp(x.strandSpread, 0, 20);
-      if (typeof x.strandInstances === "number")  flowTune.strandInstances = clamp(x.strandInstances, 0, 20);
-      if (typeof x.orbSpeed === "number")         flowTune.orbSpeed = clamp(x.orbSpeed, 0, 20);
-      if (typeof x.orbGlowDistance === "number")  flowTune.orbGlowDistance = clamp(x.orbGlowDistance, 0, 20);
-      if (typeof x.bendFillet === "number")       flowTune.bendFillet = clamp(x.bendFillet, 0, 40);
-      if (typeof x.bendQuantity === "number")     flowTune.bendQuantity = clamp(x.bendQuantity, 1, 8);
-      if (typeof x.fieldHighwayStrands === "number") {
-        flowTune.fieldHighwayStrands = clamp(Math.round(x.fieldHighwayStrands), 1, 8);
-      }
-      if (typeof x.tweenQty === "number")    flowTune.tweenQty = clamp(x.tweenQty, 0, 20);
-      if (typeof x.tweenJitter === "number") flowTune.tweenJitter = clamp(x.tweenJitter, 0, 20);
-      if (typeof x.tweenOffset === "number") flowTune.tweenOffset = clamp(x.tweenOffset, 0, 20);
+  /**
+   * @param {object} x parsed FLOW_TUNE payload
+   * @param {boolean} applyCamera when false (coma-berenices embed), keep per-iframe yaw/pitch/zoom independent
+   */
+  function applyFlowTunePayload(x, applyCamera) {
+    if (!x || typeof x !== "object") return;
+    if (typeof x.arcJitter === "number")        flowTune.arcJitter = clamp(x.arcJitter, 0, 20);
+    if (typeof x.arcInconsistency === "number") flowTune.arcInconsistency = clamp(x.arcInconsistency, 0, 20);
+    if (typeof x.strandSpread === "number")     flowTune.strandSpread = clamp(x.strandSpread, 0, 20);
+    if (typeof x.strandInstances === "number")  flowTune.strandInstances = clamp(x.strandInstances, 0, 20);
+    if (typeof x.orbSpeed === "number")         flowTune.orbSpeed = clamp(x.orbSpeed, 0, 20);
+    if (typeof x.orbGlowDistance === "number")  flowTune.orbGlowDistance = clamp(x.orbGlowDistance, 0, 20);
+    if (typeof x.bendFillet === "number")       flowTune.bendFillet = clamp(x.bendFillet, 0, 40);
+    if (typeof x.bendQuantity === "number")     flowTune.bendQuantity = clamp(x.bendQuantity, 1, 8);
+    if (typeof x.fieldHighwayStrands === "number") {
+      flowTune.fieldHighwayStrands = clamp(Math.round(x.fieldHighwayStrands), 1, 8);
+    }
+    if (typeof x.tweenQty === "number")    flowTune.tweenQty = clamp(x.tweenQty, 0, 20);
+    if (typeof x.tweenJitter === "number") flowTune.tweenJitter = clamp(x.tweenJitter, 0, 20);
+    if (typeof x.tweenOffset === "number") flowTune.tweenOffset = clamp(x.tweenOffset, 0, 20);
+    if (applyCamera) {
       if (typeof x.yaw === "number")         scene3d.yaw = clamp(x.yaw, -Math.PI * 2, Math.PI * 2);
       if (typeof x.pitch === "number")       scene3d.pitch = clamp(x.pitch, -1.15, 1.15);
       if (typeof x.depth === "number")       scene3d.depth = clamp(x.depth, 0, 20);
@@ -396,7 +399,6 @@
       if (typeof x.autoSpin === "boolean")   scene3d.autoSpin = x.autoSpin;
       if (typeof x.spinSpeed === "number") {
         const rawSpin = Number(x.spinSpeed) || 0;
-        // Migrate legacy persisted units (rad/ms) into dial units.
         if (rawSpin > 0 && rawSpin <= 0.02) {
           const legacyDial = (rawSpin * 1000 / (Math.PI * 2)) * SPIN_DIAL_MAX;
           scene3d.spinSpeed = clamp(legacyDial, 0, SPIN_DIAL_MAX);
@@ -404,20 +406,39 @@
           scene3d.spinSpeed = clamp(rawSpin, 0, SPIN_DIAL_MAX);
         }
       }
-      if (IS_FIELD) flowTune.strandInstances = 1;
-      if (typeof x.showNodeLabels === "boolean") showNodeLabels = x.showNodeLabels;
+    }
+    if (IS_FIELD) flowTune.strandInstances = 1;
+    if (typeof x.showNodeLabels === "boolean") showNodeLabels = x.showNodeLabels;
+  }
+
+  function loadFlowTune() {
+    try {
+      const raw = localStorage.getItem(FLOW_TUNE_KEY);
+      if (!raw) return;
+      const x = JSON.parse(raw);
+      applyFlowTunePayload(x, !IS_EMBED);
     } catch (_) { /* ignore */ }
   }
 
   function saveFlowTune() {
     try {
-      localStorage.setItem(FLOW_TUNE_KEY, JSON.stringify({
-        ...flowTune,
-        yaw: scene3d.yaw, pitch: scene3d.pitch,
-        depth: scene3d.depth, perspective: scene3d.perspective,
-        autoSpin: scene3d.autoSpin, spinSpeed: scene3d.spinSpeed,
-        showNodeLabels,
-      }));
+      if (IS_EMBED) {
+        let prev = {};
+        try {
+          const raw = localStorage.getItem(FLOW_TUNE_KEY);
+          if (raw) prev = JSON.parse(raw) || {};
+        } catch (_) {}
+        const merged = { ...prev, ...flowTune, showNodeLabels };
+        localStorage.setItem(FLOW_TUNE_KEY, JSON.stringify(merged));
+      } else {
+        localStorage.setItem(FLOW_TUNE_KEY, JSON.stringify({
+          ...flowTune,
+          yaw: scene3d.yaw, pitch: scene3d.pitch,
+          depth: scene3d.depth, perspective: scene3d.perspective,
+          autoSpin: scene3d.autoSpin, spinSpeed: scene3d.spinSpeed,
+          showNodeLabels,
+        }));
+      }
     } catch (_) { /* ignore */ }
   }
 
@@ -795,12 +816,18 @@
     ctx.restore();
   }
 
+  function drawPulseCanvasDotGrid(w, h, nowMs) {
+    if (typeof window.PulseCanvasDotGrid?.draw === "function") {
+      window.PulseCanvasDotGrid.draw(ctx, w, h, (nowMs || 0) * 0.001, canvas);
+    }
+  }
+
   function drawFieldBackground(w, h, nowMs) {
     if (IS_FIELD && window.GenerativeFieldBg) {
       const tSec = (nowMs || 0) * 0.001;
       window.GenerativeFieldBg.ensureInit(w, h);
       window.GenerativeFieldBg.drawBackground(ctx, w, h, tSec);
-      window.GenerativeFieldBg.drawDotGrid(ctx, w, h, tSec);
+      drawPulseCanvasDotGrid(w, h, nowMs);
       return;
     }
     const t = (nowMs || 0) * 0.00011;
@@ -886,6 +913,8 @@
     orangeEdge.addColorStop(1.0, "rgba(255,116,56,0)");
     ctx.fillStyle = orangeEdge;
     ctx.fillRect(0, 0, w, h);
+
+    drawPulseCanvasDotGrid(w, h, nowMs);
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -893,9 +922,9 @@
    * ═══════════════════════════════════════════════════════ */
   function drawBackdrop(w, h, pipe) {
     const display = pipe.display || {};
-    const view = pipe.view || { width: 120, height: 60 };
+    const view = pipe.view || { width: 120, height: 50 };
     const vw = view.width || 120;
-    const vh = view.height || 60;
+    const vh = view.height || 50;
     const marginX = w * 0.11;
     const marginY = h * 0.12;
     const innerW = w - marginX * 2;
@@ -2022,14 +2051,17 @@
 
   function initSceneInteraction() {
     if (!canvas) return;
-    canvas.addEventListener("mousedown", e => {
+    let scenePtrId = null;
+    function onScenePointerDown(e) {
       if (e.button !== 0) return;
       sceneDragging = true;
+      scenePtrId = e.pointerId;
       dragLastX = e.clientX;
       dragLastY = e.clientY;
-    });
-    window.addEventListener("mousemove", e => {
-      if (!sceneDragging) return;
+      canvas.setPointerCapture(e.pointerId);
+    }
+    function onScenePointerMove(e) {
+      if (!sceneDragging || e.pointerId !== scenePtrId) return;
       const dx = e.clientX - dragLastX;
       const dy = e.clientY - dragLastY;
       dragLastX = e.clientX;
@@ -2039,8 +2071,20 @@
       saveFlowTune();
       const running = render();
       if (running || scene3d.autoSpin) scheduleAnimationFrame();
-    });
-    window.addEventListener("mouseup", () => { sceneDragging = false; });
+    }
+    function onScenePointerUp(e) {
+      if (e.pointerId !== scenePtrId) return;
+      sceneDragging = false;
+      scenePtrId = null;
+      try {
+        canvas.releasePointerCapture(e.pointerId);
+      } catch (_) {}
+    }
+    canvas.addEventListener("pointerdown", onScenePointerDown);
+    canvas.addEventListener("pointermove", onScenePointerMove);
+    canvas.addEventListener("pointerup", onScenePointerUp);
+    canvas.addEventListener("pointercancel", onScenePointerUp);
+    canvas.addEventListener("lostpointercapture", onScenePointerUp);
     canvas.addEventListener("wheel", e => {
       e.preventDefault();
       scene3d.depth = clamp(scene3d.depth + (e.deltaY > 0 ? -0.12 : 0.12), 0, 4);
@@ -2093,54 +2137,6 @@
    * FLOW TUNE UI  (debug panel — bottom-right)
    * ═══════════════════════════════════════════════════════ */
   function initFlowTuneUi() {
-    const style = document.createElement("style");
-    style.textContent = `
-      .flow-tune-toggle {
-        position: fixed; right: 14px; bottom: 14px; z-index: 50;
-        border: 1px solid rgba(180, 195, 215, 0.20);
-        background: rgba(10, 14, 24, 0.80);
-        color: rgba(180, 195, 215, 0.82);
-        padding: 7px 10px; font-size: 10px; letter-spacing: 0.1em;
-        text-transform: uppercase;
-        font-family: "IBM Plex Mono", ui-monospace, monospace;
-        border-radius: 2px; cursor: pointer;
-      }
-      .flow-tune-modal {
-        position: fixed; right: 14px; bottom: 48px;
-        width: min(300px, 82vw); z-index: 50;
-        border: 1px solid rgba(180, 195, 215, 0.14);
-        background: rgba(10, 14, 24, 0.94);
-        color: rgba(180, 195, 215, 0.88);
-        border-radius: 3px; padding: 10px 10px 9px;
-        font-family: "IBM Plex Mono", ui-monospace, monospace;
-        backdrop-filter: blur(8px);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
-      }
-      .flow-tune-modal[hidden] { display: none; }
-      .flow-tune-title {
-        margin: 0 0 8px; font-size: 10px; text-transform: uppercase;
-        letter-spacing: 0.14em; color: rgba(0, 78, 220, 0.8);
-      }
-      .flow-tune-row { margin-bottom: 8px; }
-      .flow-tune-row label {
-        display: flex; justify-content: space-between; gap: 8px;
-        font-size: 10px; margin-bottom: 3px;
-      }
-      .flow-tune-row input[type="range"] {
-        width: 100%; accent-color: #004e8c;
-      }
-      .flow-tune-actions { display: flex; justify-content: flex-end; }
-      .flow-tune-actions button {
-        border: 1px solid rgba(27, 43, 74, 0.22);
-        background: rgba(255, 255, 255, 0.8);
-        color: rgba(27, 43, 74, 0.88);
-        padding: 5px 8px; font-size: 10px; letter-spacing: 0.08em;
-        text-transform: uppercase; border-radius: 2px; cursor: pointer;
-        font-family: "IBM Plex Mono", ui-monospace, monospace;
-      }
-    `;
-    document.head.appendChild(style);
-
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "flow-tune-toggle";
@@ -2158,6 +2154,13 @@
     modal.hidden = true;
     modal.innerHTML = R.buildFlowTuneModalHtml(IS_FIELD);
     document.body.appendChild(modal);
+
+    if (typeof window.PulseCanvasDotGrid?.mountFlowTuneModal === "function") {
+      window.PulseCanvasDotGrid.mountFlowTuneModal(modal, () => {
+        const running = render();
+        if (running || scene3d.autoSpin) scheduleAnimationFrame();
+      });
+    }
 
     const modalRows = R.getStrandModalRows(IS_FIELD);
     function tuneInput(row) {
@@ -2305,14 +2308,24 @@
     const running = render();
     if (running || scene3d.autoSpin) scheduleAnimationFrame();
   });
+  window.addEventListener("pulse-dotgrid-change", () => {
+    const running = render();
+    if (running || scene3d.autoSpin) scheduleAnimationFrame();
+  });
   window.addEventListener("storage", e => {
     if (e.key === GENERATIVE_PIPE_KEY) syncFromPipe();
     if (e.key === FLOW_TUNE_KEY && e.newValue) {
-      loadFlowTune();
-      applyChromeAfterFlowLoad();
-      flowTuneSyncUi();
-      const running = render();
-      if (running || scene3d.autoSpin) scheduleAnimationFrame();
+      try {
+        if (IS_EMBED) {
+          applyFlowTunePayload(JSON.parse(e.newValue), false);
+        } else {
+          loadFlowTune();
+        }
+        applyChromeAfterFlowLoad();
+        flowTuneSyncUi();
+        const running = render();
+        if (running || scene3d.autoSpin) scheduleAnimationFrame();
+      } catch (_) {}
     }
   });
   window.setInterval(syncFromPipe, 1200);

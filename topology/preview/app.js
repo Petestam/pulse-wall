@@ -3,20 +3,20 @@
 
   const CELL = 10;
   const VIEW_W = 120;
-  /** Canvas height in SVG units (2:1 aspect with width; e.g. wall preview). */
-  const VIEW_H = 60;
+  /** Canvas height in SVG units (12:5 aspect with width — wall tile). */
+  const VIEW_H = 50;
 
-  /** Concentric trust-zone lanes on full 2:1 canvas (elliptical). */
+  /** Concentric trust-zone lanes on full 12:5 canvas (elliptical). */
   const CONCENTRIC_LAYOUT = {
     cx: VIEW_W / 2,
     cy: VIEW_H / 2,
     rings: {
-      external: { rx: 57.0, ry: 27.3, band: 0.105, power: 4.8, phase: Math.PI * 1.02 },
-      "enterprise-edge": { rx: 50.8, ry: 24.0, band: 0.100, power: 4.2, phase: Math.PI * 0.96 },
-      "network-enforcement": { rx: 42.4, ry: 19.7, band: 0.095, power: 3.8, phase: Math.PI * 0.88 },
-      application: { rx: 32.8, ry: 15.0, band: 0.090, power: 3.4, phase: Math.PI * 0.18 },
-      "soc-platform": { rx: 22.8, ry: 10.7, band: 0.085, power: 3.0, phase: -Math.PI / 2 },
-      core: { rx: 14.4, ry: 7.1, band: 0.075, power: 2.6, phase: Math.PI * 0.08 },
+      external: { rx: 57.0, ry: 22.75, band: 0.105, power: 4.8, phase: Math.PI * 1.02 },
+      "enterprise-edge": { rx: 50.8, ry: 20.0, band: 0.100, power: 4.2, phase: Math.PI * 0.96 },
+      "network-enforcement": { rx: 42.4, ry: 16.42, band: 0.095, power: 3.8, phase: Math.PI * 0.88 },
+      application: { rx: 32.8, ry: 12.5, band: 0.090, power: 3.4, phase: Math.PI * 0.18 },
+      "soc-platform": { rx: 22.8, ry: 8.92, band: 0.085, power: 3.0, phase: -Math.PI / 2 },
+      core: { rx: 14.4, ry: 5.92, band: 0.075, power: 2.6, phase: Math.PI * 0.08 },
     },
   };
 
@@ -2005,7 +2005,7 @@
 
     document.getElementById("btn-open-generative")?.addEventListener("click", () => {
       publishGenerativePipe();
-      const u = new URL("./generative.html", window.location.href);
+      const u = new URL("./orion.html", window.location.href);
       window.open(u.href, "_blank", "noopener,noreferrer");
     });
 

@@ -1,5 +1,5 @@
 /**
- * Ellipsoid previews (blank-gradient / fabric): ?embed=1 hides chrome; parent drives via postMessage.
+ * Ellipsoid previews (andromeda / reticulum): ?embed=1 hides chrome; parent drives via postMessage.
  * Supports: click, setRange, setChecked, setRadio (same IDs as the standalone page modals).
  */
 (function () {

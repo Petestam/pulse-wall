@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orion · strand classic routing · Pulse</title>
+    <link rel="stylesheet" href="canvas-chrome.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: rgb(7, 24, 45);
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body data-pulse-page="orion">
+    <div class="viewport-stage">
+      <div class="viewport-12x5">
+        <canvas id="viz" aria-label="Orion — generative strand graph (classic routing)"></canvas>
+      </div>
+    </div>
+    <div class="chrome" role="toolbar" aria-label="Strand controls">
+      <button type="button" id="btn-spin" class="is-active">Spin</button>
+      <button type="button" id="btn-labels">Labels</button>
+      <button type="button" id="btn-sync">Sync pipe</button>
+      <button type="button" id="btn-regen">Regenerate</button>
+      <nav class="chrome-nav" aria-label="Pulse canvas views">
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="orion" href="orion.html">Orion · classic</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="eridanus" href="eridanus.html">Eridanus · field</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="andromeda" href="andromeda.html">Andromeda · gradient</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="reticulum" href="reticulum.html">Reticulum · fabric</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="perseus" href="perseus.html">Perseus · generative</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="coma-berenices" href="coma-berenices.html">Coma Berenices · grid</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="ophiuchus" href="ophiuchus.html">Ophiuchus · topology</a>
+      </nav>
+    </div>
+    <div class="scenario-strip" id="scenario-strip">
+      <div class="scenario-strip__title">12 scenarios</div>
+      <div class="scenario-strip__buttons" id="scenario-buttons"></div>
+    </div>
+    <script src="shared-modal-registry.js"></script>
+    <script src="canvas-dot-grid.js"></script>
+    <script src="generative.js"></script>
+    <script src="canvas-nav.js"></script>
+  </body>
+</html>

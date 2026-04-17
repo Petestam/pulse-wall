@@ -2,12 +2,12 @@
   "redirects": [
     {
       "source": "/topology",
-      "destination": "/topology/preview/",
+      "destination": "/topology/preview/coma-berenices.html",
       "permanent": false
     },
     {
       "source": "/",
-      "destination": "/topology/preview/",
+      "destination": "/topology/preview/coma-berenices.html",
       "permanent": false
     }
   ]

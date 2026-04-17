@@ -11,7 +11,7 @@ cd topology
 python3 -m http.server 8765
 ```
 
-Open `http://localhost:8765/preview/index.html`.
+Open `http://localhost:8765/preview/ophiuchus.html` (or `http://localhost:8765/preview/index.html`, which redirects to the same editor).
 
 ## Controls
 

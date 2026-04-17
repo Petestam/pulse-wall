@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Fabric · network traces</title>
+    <title>Reticulum · ellipsoid fabric network · Pulse</title>
+    <link rel="stylesheet" href="canvas-chrome.css" />
     <style>
       * {
         box-sizing: border-box;
@@ -16,7 +17,7 @@
         font-family: system-ui, sans-serif;
       }
       body {
-        background: #050a1f;
+        background: #000;
       }
       #bg {
         position: fixed;
@@ -26,26 +27,6 @@
         width: 100%;
         height: 100%;
         pointer-events: none;
-      }
-      /* Largest 12×5 (topology tile) rectangle inside the window */
-      .viewport-stage {
-        position: fixed;
-        inset: 0;
-        z-index: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-      }
-      .viewport-12x5 {
-        pointer-events: auto;
-        position: relative;
-        width: min(100vw, calc(100vh * 12 / 5));
-        height: min(100vh, calc(100vw * 5 / 12));
-        flex-shrink: 0;
-        border-radius: 2px;
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-        overflow: hidden;
       }
       #viz {
         position: absolute;
@@ -60,223 +41,15 @@
       #viz.is-dragging {
         cursor: grabbing;
       }
-      .chrome {
-        position: fixed;
-        left: 16px;
-        bottom: 16px;
-        z-index: 2;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 10px;
-        font-size: 12px;
-      }
-      .chrome a {
-        color: rgba(255, 255, 255, 0.45);
-        text-decoration: none;
-      }
-      .chrome a:hover {
-        color: rgba(255, 255, 255, 0.85);
-      }
-      .chrome button {
-        border: 1px solid rgba(255, 255, 255, 0.28);
-        background: rgba(5, 10, 31, 0.55);
-        color: rgba(230, 248, 255, 0.9);
-        padding: 8px 14px;
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        cursor: pointer;
-        border-radius: 2px;
-      }
-      .chrome button:hover {
-        border-color: rgba(0, 210, 255, 0.45);
-        color: #fff;
-      }
-      .chrome button.is-active {
-        border-color: rgba(0, 210, 255, 0.65);
-        box-shadow: 0 0 14px rgba(0, 185, 255, 0.25);
-        color: #f4fbff;
-      }
-      .chrome .sep {
-        color: rgba(255, 255, 255, 0.25);
-        user-select: none;
-      }
-      .chrome-bg-ctrl {
-        display: inline-flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 10px 14px;
-        margin-left: 4px;
-        font-size: 10px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.42);
-      }
-      .chrome-bg-ctrl label {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-      }
-      .chrome-bg-ctrl input[type="range"] {
-        width: 84px;
-        vertical-align: middle;
-      }
-      .chrome-bg-ctrl__val {
-        min-width: 1.75em;
-        font-variant-numeric: tabular-nums;
-        color: rgba(255, 255, 255, 0.55);
-      }
-      .chrome-tools {
-        display: inline-flex;
-        align-items: flex-end;
-        gap: 6px;
-      }
-      .chrome-tool {
-        position: relative;
-        display: inline-flex;
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .chrome-tool__pop {
-        position: absolute;
-        bottom: 100%;
-        left: 0;
-        z-index: 4;
-        margin-bottom: 6px;
-        min-width: 212px;
-        padding: 10px 12px;
-        background: rgba(5, 10, 31, 0.94);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 4px;
-        box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.4);
-        color: rgba(230, 248, 255, 0.9);
-        font-size: 10px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        opacity: 0;
-        visibility: hidden;
-        max-height: 0;
-        overflow: hidden;
-        pointer-events: none;
-        transition:
-          opacity 0.18s ease,
-          max-height 0.22s ease,
-          visibility 0.18s;
-      }
-      .chrome-tool.chrome-tool--open .chrome-tool__pop {
-        opacity: 1;
-        visibility: visible;
-        /* Cap below the top of the window; scroll when content is taller */
-        max-height: min(85vh, 720px);
-        overflow-x: hidden;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(0, 210, 255, 0.35) transparent;
-        pointer-events: auto;
-      }
-      .chrome-tool.chrome-tool--open .chrome-tool__pop::-webkit-scrollbar {
-        width: 6px;
-      }
-      .chrome-tool.chrome-tool--open .chrome-tool__pop::-webkit-scrollbar-thumb {
-        background: rgba(0, 210, 255, 0.35);
-        border-radius: 3px;
-      }
-      .chrome-tool__pop button.chrome-tool__reseed {
-        width: 100%;
-        margin-top: 8px;
-        padding: 7px 10px;
-        font-size: 10px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        border: 1px solid rgba(255, 255, 255, 0.28);
-        background: rgba(5, 10, 31, 0.55);
-        color: rgba(230, 248, 255, 0.9);
-        border-radius: 2px;
-        cursor: pointer;
-      }
-      .chrome-tool__pop button.chrome-tool__reseed:hover {
-        border-color: rgba(0, 210, 255, 0.45);
-        color: #fff;
-      }
-      .chrome-tool__pop label {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .chrome-tool__pop label + label {
-        margin-top: 10px;
-      }
-      .chrome-tool__pop .slide-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .chrome-tool__pop .slide-val {
-        flex-shrink: 0;
-        min-width: 3em;
-        text-align: right;
-        color: rgba(255, 255, 255, 0.55);
-        font-size: 10px;
-        font-variant-numeric: tabular-nums;
-      }
-      .chrome-tool__pop .chrome-tool__subhead {
-        margin: 0 0 6px;
-        font-size: 10px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: rgba(0, 210, 255, 0.55);
-      }
-      .chrome-tool__pop .chrome-tool__subhead:not(:first-child) {
-        margin-top: 12px;
-      }
-      .chrome-tool__pop .chrome-tool__toggles {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .chrome-tool__pop .chrome-tool__toggles label {
-        flex-direction: row;
-        align-items: center;
-        gap: 6px;
-        text-transform: none;
-        letter-spacing: 0.03em;
-        font-size: 10px;
-        cursor: pointer;
-      }
-      .chrome-tool__pop .chrome-tool__toggles input {
-        accent-color: rgba(0, 210, 255, 0.75);
-      }
-      .chrome-tool__pop input[type="range"] {
-        width: 100%;
-        min-width: 0;
-        accent-color: rgba(0, 210, 255, 0.75);
-      }
-      .chrome-tool__row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .chrome-tool__val {
-        flex-shrink: 0;
-        min-width: 2.5em;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-        color: rgba(255, 255, 255, 0.5);
-        font-size: 10px;
-      }
     </style>
   </head>
-  <body>
+  <body data-pulse-page="reticulum">
     <canvas id="bg" width="300" height="150" aria-hidden="true"></canvas>
-    <div class="viewport-stage" aria-hidden="true">
+    <div class="viewport-stage viewport-stage--above-bg" aria-hidden="true">
       <div class="viewport-12x5" id="viewport-12x5">
         <canvas
           id="viz"
-          aria-label="Ellipsoid in 12×5×5 volume — drag to rotate, scroll to zoom, Reset view for 12×5 front"
+          aria-label="Reticulum — ellipsoid fabric in 12×5×5 volume; drag to rotate, scroll to zoom, Reset for 12×5 front"
         ></canvas>
       </div>
     </div>
@@ -506,8 +279,8 @@
             <label>
               <span>Dot size</span>
               <div class="chrome-tool__row">
-                <input type="range" id="marker-size" min="50" max="500" value="300" step="5" />
-                <span class="chrome-tool__val" id="marker-size-val">3.00x</span>
+                <input type="range" id="marker-size" min="50" max="500" value="175" step="5" />
+                <span class="chrome-tool__val" id="marker-size-val">1.75x</span>
               </div>
             </label>
           </div>
@@ -569,13 +342,48 @@
           <span class="chrome-bg-ctrl__val" id="bg-wave-contrast-val">52</span>
         </label>
       </div>
-      <span class="sep">·</span>
-      <a href="blank-gradient.html">Base gradient</a>
-      <span class="sep">·</span>
-      <a href="generative.html">Strand field</a>
-      <span class="sep">·</span>
-      <a href="index.html">Topology editor</a>
+      <details class="chrome-dotgrid-details">
+        <summary class="chrome-dotgrid-summary">Dot grid · vw/64</summary>
+        <div class="chrome-dotgrid-body">
+          <label class="chrome-dotgrid-check"
+            ><input type="checkbox" id="dotgrid-waves" /> Waves (grid)</label
+          >
+          <div class="chrome-dotgrid-spacing">
+            <span class="chrome-dotgrid-label">Spacing</span>
+            <label
+              ><input type="radio" name="dotgrid-spacing" value="square" checked /> Square</label
+            >
+            <label
+              ><input type="radio" name="dotgrid-spacing" value="triangular" /> Triangular</label
+            >
+          </div>
+          <label class="chrome-dotgrid-row">
+            <span>Contrast</span>
+            <input type="range" id="dotgrid-contrast" min="0" max="100" value="28" step="1" />
+            <span id="dotgrid-contrast-val">28</span>
+          </label>
+        </div>
+      </details>
+      <nav class="chrome-nav" aria-label="Pulse canvas views">
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="orion" href="orion.html">Orion · classic</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="eridanus" href="eridanus.html">Eridanus · field</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="andromeda" href="andromeda.html">Andromeda · gradient</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="reticulum" href="reticulum.html">Reticulum · fabric</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="perseus" href="perseus.html">Perseus · generative</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="coma-berenices" href="coma-berenices.html">Coma Berenices · grid</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a class="chrome-nav__link" data-pulse-page="ophiuchus" href="ophiuchus.html">Ophiuchus · topology</a>
+      </nav>
     </div>
+    <script src="canvas-dot-grid.js"></script>
+    <script src="generative-field-bg.js"></script>
+    <script src="generative-field-bg.js"></script>
     <script>
       (function () {
         "use strict";
@@ -645,68 +453,22 @@
             rows = Math.ceil(h / gridStep) + 3;
           }
 
-          ctx.fillStyle = "#050a1f";
-          ctx.fillRect(0, 0, w, h);
-
-          const shift = Math.sin(t * 0.09) * w * 0.05 + Math.cos(t * 0.055) * w * 0.035;
-          const tilt = Math.sin(t * 0.035) * 0.1;
-          const x1 = shift;
-          const y1 = tilt * h;
-          const x2 = w + shift * 0.28;
-          const y2 = h - tilt * h;
-          const baseGrad = ctx.createLinearGradient(x1, y1, x2, y2);
-          baseGrad.addColorStop(0, "rgba(72, 188, 245, 0.92)");
-          baseGrad.addColorStop(0.28 + Math.sin(t * 0.07) * 0.03, "rgba(38, 78, 210, 0.88)");
-          baseGrad.addColorStop(0.58 + Math.cos(t * 0.05) * 0.025, "rgba(22, 48, 150, 0.9)");
-          baseGrad.addColorStop(0.82, "rgba(8, 14, 45, 0.95)");
-          baseGrad.addColorStop(1, "#050a1f");
-          ctx.globalAlpha = 0.72;
-          ctx.fillStyle = baseGrad;
-          ctx.fillRect(0, 0, w, h);
-          ctx.globalAlpha = 1;
-
-          ctx.globalCompositeOperation = "screen";
-          for (let i = 0; i < BLOB_COUNT; i++) {
-            const k = i + 0.37;
-            const bx =
-              w *
-              (0.5 +
-                0.44 * Math.sin(t * 0.058 + k * 1.17) * Math.cos(t * 0.038 + k * 0.51) +
-                0.06 * Math.sin(t * 0.16 + k));
-            const by =
-              h *
-              (0.48 +
-                0.4 * Math.cos(t * 0.048 + k * 1.31) +
-                0.08 * Math.sin(t * 0.12 + k * 0.9) +
-                0.045 * Math.cos(t * 0.24 + i * 0.4));
-            const br = m * (0.42 + 0.18 * Math.sin(t * 0.065 + i) + 0.07 * Math.cos(t * 0.09 + i * 1.8));
-            const hueShift = 0.1 * Math.sin(t * 0.07 + i);
-            drawBlob(bx, by, br, [
-              [0, "rgba(120, 210, 255, " + (0.1 + hueShift * 0.04) + ")"],
-              [0.22, "rgba(70, 130, 235, " + (0.08 - hueShift * 0.02) + ")"],
-              [0.55, "rgba(35, 70, 175, 0.045)"],
-              [0.82, "rgba(12, 22, 70, 0.02)"],
-              [1, "rgba(5, 10, 31, 0)"],
-            ]);
+          if (window.GenerativeFieldBg) {
+            window.GenerativeFieldBg.ensureInit(w, h);
+            window.GenerativeFieldBg.drawBackground(ctx, w, h, t);
+            window.GenerativeFieldBg.drawDotGrid(ctx, w, h, t);
+            window.GenerativeFieldBg.drawVignette(ctx, w, h);
+          } else {
+          if (window.GenerativeFieldBg) {
+            window.GenerativeFieldBg.ensureInit(w, h);
+            window.GenerativeFieldBg.drawBackground(ctx, w, h, t);
+            window.GenerativeFieldBg.drawDotGrid(ctx, w, h, t);
+            window.GenerativeFieldBg.drawVignette(ctx, w, h);
+          } else {
+            ctx.fillStyle = "rgb(7,24,45)";
+            ctx.fillRect(0, 0, w, h);
           }
-
-          ctx.globalCompositeOperation = "lighter";
-          for (let i = 0; i < 5; i++) {
-            const bx =
-              w * (0.12 + 0.76 * (0.5 + 0.5 * Math.sin(t * 0.042 + i * 1.9))) +
-              w * 0.055 * Math.cos(t * 0.1 + i);
-            const by =
-              h * (0.1 + 0.8 * (0.5 + 0.5 * Math.cos(t * 0.05 + i * 2.1))) +
-              h * 0.045 * Math.sin(t * 0.11 + i * 0.7);
-            const br = m * (0.52 + 0.12 * Math.sin(t * 0.055 + i));
-            drawBlob(bx, by, br, [
-              [0, "rgba(85, 155, 240, 0.065)"],
-              [0.45, "rgba(45, 75, 165, 0.035)"],
-              [0.78, "rgba(15, 25, 80, 0.012)"],
-              [1, "rgba(5, 10, 31, 0)"],
-            ]);
           }
-          ctx.globalCompositeOperation = "source-over";
 
           const waveX = (px, py, tt) => {
             let x = 0;
@@ -774,6 +536,13 @@
           }
 
           requestAnimationFrame(tick);
+        }
+
+        const dotGridDetailsEl = document.querySelector(".chrome-dotgrid-details");
+        if (dotGridDetailsEl && window.PulseCanvasDotGrid) {
+          window.PulseCanvasDotGrid.mountChromeDetails(dotGridDetailsEl, function () {
+            requestAnimationFrame(tick);
+          });
         }
 
         resize();
@@ -977,8 +746,8 @@
           showPaths: true,
           showStaticVolumePoints: true,
           markerCount: 50,
-          /** 0.5..5 multiplier for marker dot size (default 3x). */
-          markerSizeMul: 3,
+          /** 0.5..5 multiplier for marker dot size (default 1.75×). */
+          markerSizeMul: 1.75,
           /** 0..5 multiplier for pathfinder fillet radius. */
           pathFilletMul: 1,
           /** 0..2.6 multiplier for offset orb size around each marker node. */
@@ -1638,52 +1407,6 @@
           return out;
         }
 
-        function polylineLengthScreen(pts) {
-          let L = 0;
-          for (let i = 0; i < pts.length - 1; i++) {
-            L += Math.hypot(
-              pts[i + 1].x - pts[i].x,
-              pts[i + 1].y - pts[i].y,
-            );
-          }
-          return L;
-        }
-
-        function slicePathByArcLength(samples, d0, d1) {
-          if (d1 <= d0 || samples.length < 2) return [];
-          const out = [];
-          let acc = 0;
-          for (let i = 0; i < samples.length - 1; i++) {
-            const a = samples[i];
-            const b = samples[i + 1];
-            const sl = Math.hypot(b.x - a.x, b.y - a.y);
-            const s0 = acc;
-            const s1 = acc + sl;
-            if (s1 < d0) {
-              acc = s1;
-              continue;
-            }
-            if (out.length === 0) {
-              const u = Math.max(0, Math.min(1, (d0 - s0) / (sl || 1)));
-              out.push({
-                x: a.x + u * (b.x - a.x),
-                y: a.y + u * (b.y - a.y),
-              });
-            }
-            if (d1 <= s1) {
-              const u = (d1 - s0) / (sl || 1);
-              out.push({
-                x: a.x + u * (b.x - a.x),
-                y: a.y + u * (b.y - a.y),
-              });
-              return out;
-            }
-            out.push({ x: b.x, y: b.y });
-            acc = s1;
-          }
-          return out;
-        }
-
         function distPointToSegment(px, py, ax, ay, bx, by) {
           const dx = bx - ax;
           const dy = by - ay;
@@ -1750,11 +1473,32 @@
           };
         }
 
-        function drawPathfinderQuadraticSegment(A, B, segIndex, journeyIndex) {
+        function drawPathfinderQuadraticSegment(
+          A,
+          B,
+          segIndex,
+          journeyIndex,
+          lineWidth,
+          isActive,
+        ) {
           const K = pathfinderQuadraticControl(A, B, segIndex, journeyIndex);
           ctx.beginPath();
           ctx.moveTo(A.x, A.y);
           ctx.quadraticCurveTo(K.x, K.y, B.x, B.y);
+          // Match core strand palette; render as dual-pass stroke.
+          ctx.shadowColor = "rgba(0,0,0,0)";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          ctx.lineWidth = lineWidth * (isActive ? 1.9 : 1.7);
+          ctx.strokeStyle = isActive
+            ? "rgba(255,255,255,0.34)"
+            : "rgba(255,255,255,0.2)";
+          ctx.stroke();
+          ctx.lineWidth = lineWidth;
+          ctx.strokeStyle = isActive
+            ? "rgba(255,255,255,0.62)"
+            : "rgba(255,255,255,0.34)";
           ctx.stroke();
         }
 
@@ -1770,225 +1514,6 @@
             for (let k = 0; k < chunk.length; k++) dense.push(chunk[k]);
           }
           return dense;
-        }
-
-        function lerp255(a, b, t) {
-          return a + (b - a) * t;
-        }
-
-        /**
-         * Programmatic spectrum ramp (blue → cyan → violet → magenta → orange).
-         * Parameter `t01` is position along the traveling patch (0…1) or path-normalized hue.
-         */
-        function pathPulseSpectrumRGB(t01) {
-          const t = Math.max(0, Math.min(1, t01));
-          const stops = [
-            { t: 0, r: 21, g: 48, b: 216 },
-            { t: 0.22, r: 0, g: 200, b: 255 },
-            { t: 0.48, r: 139, g: 92, b: 246 },
-            { t: 0.72, r: 255, g: 0, b: 170 },
-            { t: 1, r: 255, g: 140, b: 0 },
-          ];
-          for (let i = 0; i < stops.length - 1; i++) {
-            if (t <= stops[i + 1].t) {
-              const u =
-                (t - stops[i].t) / (stops[i + 1].t - stops[i].t || 1);
-              return {
-                r: lerp255(stops[i].r, stops[i + 1].r, u),
-                g: lerp255(stops[i].g, stops[i + 1].g, u),
-                b: lerp255(stops[i].b, stops[i + 1].b, u),
-              };
-            }
-          }
-          return { r: 255, g: 140, b: 0 };
-        }
-
-        function spectrumRampColorCSS(t01) {
-          const { r, g, b } = pathPulseSpectrumRGB(t01);
-          return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
-        }
-
-        /**
-         * Traveling pulse strip: fills each sub-segment with a linear gradient in ramp space
-         * (same 0…1 mapping as the full horizontal spectrum).
-         */
-        function drawSpectrumPatchAlongPolyline(ctx, samples, d0, d1) {
-          const L = polylineLengthScreen(samples);
-          if (L < 1) return;
-          let d0c = Math.max(0, d0);
-          let d1c = Math.min(L, d1);
-          if (d1c <= d0c) return;
-          const patchL = d1c - d0c;
-          const stripH = Math.max(8, Math.min(24, patchL * 0.055));
-
-          let acc = 0;
-          for (let i = 0; i < samples.length - 1; i++) {
-            const a = samples[i];
-            const b = samples[i + 1];
-            const sl = Math.hypot(b.x - a.x, b.y - a.y);
-            const s0 = acc;
-            const s1 = acc + sl;
-            const lo = Math.max(d0c, s0);
-            const hi = Math.min(d1c, s1);
-            if (hi > lo) {
-              const u0 = (lo - s0) / (sl || 1);
-              const px0 = a.x + u0 * (b.x - a.x);
-              const py0 = a.y + u0 * (b.y - a.y);
-              const segLen = hi - lo;
-              const ang = Math.atan2(b.y - a.y, b.x - a.x);
-              const ram0 = (lo - d0c) / patchL;
-              const ram1 = (hi - d0c) / patchL;
-              ctx.save();
-              ctx.translate(px0, py0);
-              ctx.rotate(ang);
-              const g = ctx.createLinearGradient(0, 0, segLen, 0);
-              const nStops = Math.max(
-                2,
-                Math.min(36, 4 + Math.ceil(Math.abs(ram1 - ram0) * 28)),
-              );
-              for (let si = 0; si <= nStops; si++) {
-                const f = si / nStops;
-                const ram = ram0 + (ram1 - ram0) * f;
-                g.addColorStop(f, spectrumRampColorCSS(ram));
-              }
-              ctx.fillStyle = g;
-              ctx.fillRect(0, -stripH * 0.5, segLen, stripH);
-              ctx.restore();
-            }
-            acc = s1;
-          }
-        }
-
-        function computeWaypointArcLengths(waypoints, journeyIndex) {
-          const nodeS = [0];
-          let acc = 0;
-          for (let s = 0; s < waypoints.length - 1; s++) {
-            const A = waypoints[s];
-            const B = waypoints[s + 1];
-            const K = pathfinderQuadraticControl(A, B, s, journeyIndex);
-            const chunk = sampleQuadraticBezierPoints(A, K, B, 30);
-            let segLen = 0;
-            for (let i = 0; i < chunk.length - 1; i++) {
-              segLen += Math.hypot(
-                chunk[i + 1].x - chunk[i].x,
-                chunk[i + 1].y - chunk[i].y,
-              );
-            }
-            acc += segLen;
-            nodeS.push(acc);
-          }
-          return nodeS;
-        }
-
-        function strokeOpenPolyline(ctx, pts) {
-          if (pts.length < 2) return;
-          ctx.beginPath();
-          ctx.moveTo(pts[0].x, pts[0].y);
-          for (let i = 1; i < pts.length; i++) {
-            ctx.lineTo(pts[i].x, pts[i].y);
-          }
-        }
-
-        /**
-         * Wide radiance along pulse slice — stays centered on path; blur extends outward.
-         * Core strip is drawn separately (tight); this is the “light emitting” halo.
-         */
-        function drawPathPulseExtremeGlow(
-          ctx,
-          slicePts,
-          rgb,
-          pulseCenterT01,
-        ) {
-          if (slicePts.length < 2) return;
-          const { r, g, b } = rgb;
-          const pr = Math.round(r);
-          const pg = Math.round(g);
-          const pb = Math.round(b);
-          const pulseBoost = 0.55 + 0.45 * Math.sin(pulseCenterT01 * Math.PI * 2);
-
-          ctx.save();
-          ctx.lineJoin = "round";
-          ctx.lineCap = "round";
-
-          ctx.globalCompositeOperation = "screen";
-          const layers = [
-            { w: 52, a: 0.09, blur: 62 },
-            { w: 36, a: 0.14, blur: 44 },
-            { w: 24, a: 0.2, blur: 30 },
-            { w: 14, a: 0.28, blur: 18 },
-            { w: 7, a: 0.38, blur: 10 },
-          ];
-          for (let li = 0; li < layers.length; li++) {
-            const L = layers[li];
-            strokeOpenPolyline(ctx, slicePts);
-            ctx.strokeStyle = `rgba(${pr},${pg},${pb},${L.a * pulseBoost})`;
-            ctx.lineWidth = L.w;
-            ctx.shadowColor = `rgba(${pr},${pg},${pb},${0.75 * pulseBoost})`;
-            ctx.shadowBlur = L.blur;
-            ctx.stroke();
-          }
-          ctx.shadowBlur = 0;
-
-          ctx.globalCompositeOperation = "lighter";
-          strokeOpenPolyline(ctx, slicePts);
-          ctx.strokeStyle = `rgba(255,255,255,${0.12 * pulseBoost})`;
-          ctx.lineWidth = 3;
-          ctx.shadowColor = `rgba(${pr},${pg},${pb},0.9)`;
-          ctx.shadowBlur = 22;
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-
-          ctx.restore();
-        }
-
-        /** Radial bloom at journey nodes when the pulse is near (arc-length). */
-        function drawJourneyNodeGlow(
-          ctx,
-          x,
-          y,
-          intensity,
-          rgb,
-          localT01,
-        ) {
-          if (intensity < 0.04) return;
-          const { r, g, b } = rgb;
-          const pr = Math.round(r);
-          const pg = Math.round(g);
-          const pb = Math.round(b);
-          const pulseBoost = 0.65 + 0.35 * Math.sin(localT01 * Math.PI * 2);
-          const R = 6 + 38 * intensity * pulseBoost;
-
-          ctx.save();
-          ctx.globalCompositeOperation = "screen";
-
-          const g1 = ctx.createRadialGradient(x, y, 0, x, y, R * 1.35);
-          g1.addColorStop(0, `rgba(${pr},${pg},${pb},${0.55 * intensity})`);
-          g1.addColorStop(0.45, `rgba(${pr},${pg},${pb},${0.22 * intensity})`);
-          g1.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
-          ctx.fillStyle = g1;
-          ctx.beginPath();
-          ctx.arc(x, y, R * 1.35, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.globalCompositeOperation = "lighter";
-          const g2 = ctx.createRadialGradient(x, y, R * 0.15, x, y, R * 0.95);
-          g2.addColorStop(0, `rgba(255,255,255,${0.55 * intensity})`);
-          g2.addColorStop(0.35, `rgba(${pr},${pg},${pb},${0.4 * intensity})`);
-          g2.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
-          ctx.fillStyle = g2;
-          ctx.beginPath();
-          ctx.arc(x, y, R * 0.95, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.shadowColor = `rgba(${pr},${pg},${pb},${0.85 * intensity})`;
-          ctx.shadowBlur = 28 * intensity;
-          ctx.strokeStyle = `rgba(255,255,255,${0.5 * intensity})`;
-          ctx.lineWidth = 2.2 * intensity;
-          ctx.beginPath();
-          ctx.arc(x, y, 3 + 5 * intensity, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-          ctx.restore();
         }
 
         /**
@@ -2074,9 +1599,6 @@
           }
 
           const active = state.pathfinderActiveJourney;
-          const now = performance.now();
-          const pulsePhase =
-            (now - state.pathfinderAnimT0) * 0.000082;
 
           ctx.save();
           ctx.lineJoin = "round";
@@ -2093,80 +1615,17 @@
               const waypoints = J.pts;
               const dense = buildPathfinderDenseSamples(waypoints, j);
               J._samples = dense;
-              const len = polylineLengthScreen(dense);
 
-              ctx.lineWidth = isActive ? 2.15 : 0.72;
-              ctx.strokeStyle = isActive
-                ? "rgba(255, 255, 255, 0.94)"
-                : "rgba(0, 195, 178, 0.22)";
-              ctx.shadowBlur = 0;
-              if (isActive) {
-                ctx.shadowColor = "rgba(255, 255, 255, 0.45)";
-                ctx.shadowBlur = 6;
-              }
+              const segW = isActive ? 1.075 : 0.75;
               for (let s = 0; s < waypoints.length - 1; s++) {
                 drawPathfinderQuadraticSegment(
                   waypoints[s],
                   waypoints[s + 1],
                   s,
                   j,
+                  segW,
+                  isActive,
                 );
-              }
-              ctx.shadowBlur = 0;
-
-              if (isActive && len > 4) {
-                const patchLen = Math.max(36, len * 0.19);
-                const c = (pulsePhase % 1) * len;
-                let d0 = c - patchLen * 0.5;
-                let d1 = c + patchLen * 0.5;
-                if (d0 < 0) {
-                  d0 = 0;
-                  d1 = Math.min(patchLen, len);
-                }
-                if (d1 > len) {
-                  d1 = len;
-                  d0 = Math.max(0, len - patchLen);
-                }
-                const pulseT01 = len > 1e-6 ? c / len : 0;
-                const rgbPulse = pathPulseSpectrumRGB(pulseT01);
-                const nodeS = computeWaypointArcLengths(waypoints, j);
-                const sigma = Math.max(22, patchLen * 0.48);
-
-                const slicePts = slicePathByArcLength(dense, d0, d1);
-                drawPathPulseExtremeGlow(ctx, slicePts, rgbPulse, pulseT01);
-
-                for (let ni = 0; ni < waypoints.length; ni++) {
-                  const dist = Math.abs(nodeS[ni] - c);
-                  const intensity = Math.exp(
-                    -(dist * dist) / (2 * sigma * sigma),
-                  );
-                  const wx = waypoints[ni].x;
-                  const wy = waypoints[ni].y;
-                  const mixT =
-                    len > 1e-6
-                      ? Math.max(0, Math.min(1, 0.55 * pulseT01 + 0.45 * (nodeS[ni] / len)))
-                      : pulseT01;
-                  const rgbN = pathPulseSpectrumRGB(mixT);
-                  drawJourneyNodeGlow(
-                    ctx,
-                    wx,
-                    wy,
-                    intensity,
-                    rgbN,
-                    pulseT01 + ni * 0.31,
-                  );
-                }
-
-                ctx.save();
-                ctx.globalCompositeOperation = "source-over";
-                ctx.globalAlpha = 1;
-                drawSpectrumPatchAlongPolyline(ctx, dense, d0, d1);
-                ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-                ctx.lineWidth = 1.35;
-                ctx.shadowBlur = 0;
-                strokeOpenPolyline(ctx, slicePts);
-                ctx.stroke();
-                ctx.restore();
               }
             }
           } finally {
@@ -2597,11 +2056,15 @@
                 return { x: n.ex, y: n.ey };
               }
 
-              const staticScreen = [];
+              const staticAnchors = [];
               for (let sk = 0; sk < STATIC_POINT_UV.length; sk++) {
-                staticScreen.push(
-                  toCanvas(project(staticAnchorPoint3(sk), tr)),
-                );
+                const p3 = staticAnchorPoint3(sk);
+                staticAnchors.push({
+                  x: p3.x,
+                  y: p3.y,
+                  z: p3.z,
+                  s: toCanvas(project(p3, tr)),
+                });
               }
 
               ctx.save();
@@ -2624,28 +2087,27 @@
                 const na = nodes[i];
                 const pA = linkXY(na);
                 let sk = 0;
-                if (gridNet && staticScreen.length > 0) {
+                if (gridNet && staticAnchors.length > 0) {
                   sk = Math.min(
-                    staticScreen.length - 1,
+                    staticAnchors.length - 1,
                     Math.floor(
-                      (na.ci * staticScreen.length) / Math.max(1, nCurves),
+                      (na.ci * staticAnchors.length) / Math.max(1, nCurves),
                     ),
                   );
-                } else {
+                } else if (staticAnchors.length > 0) {
                   let bestSd = Infinity;
-                  for (let k = 0; k < staticScreen.length; k++) {
-                    const sx = staticScreen[k].x;
-                    const sy = staticScreen[k].y;
-                    const dx = pA.x - sx;
-                    const dy = pA.y - sy;
-                    const d = dx * dx + dy * dy;
+                  for (let k = 0; k < staticAnchors.length; k++) {
+                    const dx = na.wx - staticAnchors[k].x;
+                    const dy = na.wy - staticAnchors[k].y;
+                    const dz = na.wz - staticAnchors[k].z;
+                    const d = dx * dx + dy * dy + dz * dz;
                     if (d < bestSd) {
                       bestSd = d;
                       sk = k;
                     }
                   }
                 }
-                const S = staticScreen[sk];
+                const S = staticAnchors[sk].s;
 
                 let bestJ = -1;
                 let bestD = -1;
@@ -2926,6 +2388,7 @@
           try {
             canvas.releasePointerCapture(e.pointerId);
           } catch (_) {}
+          frame();
         }
 
         function onWheel(e) {
@@ -3403,6 +2866,7 @@
         }
       })();
     </script>
+    <script src="canvas-nav.js"></script>
     <script src="embed-bridge.js"></script>
   </body>
 </html>

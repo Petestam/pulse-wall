@@ -844,3 +844,66 @@ body.drawer-collapsed .shell--drawer {
     rgba(255, 130, 0, 0.08) 100%
   );
 }
+
+/* Preview grid iframe (?embed=1): 12×5 cell — topology SVG only, no panel / generative backdrop */
+html.topology-embed,
+html.topology-embed body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+html.topology-embed .generative-stage {
+  display: none !important;
+}
+
+html.topology-embed .drawer-toggle {
+  display: none !important;
+}
+
+html.topology-embed .shell--drawer {
+  position: fixed;
+  inset: 0;
+  width: 100% !important;
+  max-width: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+html.topology-embed body.drawer-collapsed .shell--drawer {
+  transform: none !important;
+}
+
+html.topology-embed .panel {
+  display: none !important;
+}
+
+html.topology-embed .canvas-wrap {
+  flex: 1;
+  min-height: 0 !important;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+html.topology-embed .canvas-chrome {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 0;
+  height: 100%;
+  background: transparent;
+}
+
+html.topology-embed .canvas-chrome__bar {
+  display: none !important;
+}
+
+html.topology-embed .canvas-chrome__viewport {
+  min-height: 0 !important;
+  flex: 1;
+}
+
+html.topology-embed #topology-svg {
+  min-height: 0 !important;
+}

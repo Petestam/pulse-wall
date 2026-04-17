@@ -1,5 +1,5 @@
 /**
- * Contact sheet dock: strand transport, scenarios, flow tune, ellipsoid controls.
+ * Coma Berenices grid dock: strand transport, scenarios, flow tune, ellipsoid controls.
  * Definitions live in shared-modal-registry.js (PulseModalRegistry).
  */
 (function () {
@@ -7,18 +7,26 @@
 
   var R = window.PulseModalRegistry;
   if (!R) {
-    console.error("Load shared-modal-registry.js before contact-sheet-dock.js");
+    console.error("Load shared-modal-registry.js before coma-berenices-dock.js");
     return;
   }
 
   var FLOW_TUNE_KEY = R.FLOW_TUNE_KEY;
   var GENERATIVE_PIPE_KEY = R.GENERATIVE_PIPE_KEY;
+  var DOTGRID_KEY = "topology.pulse.canvasDotGrid.v1";
+  var DOTGRID_DEFAULT = { waves: false, spacing: "square", contrast: 28 };
   var DEFAULT_FLOW = R.DEFAULT_FLOW_TUNE;
   var TUNE_FIELDS = R.STRAND_CONTACT_SLIDERS;
   var ELLIPSOID = R.ELLIPSOID_CONTROL_SECTIONS;
 
-  var ifrStrand = Array.from(document.querySelectorAll('iframe[src*="generative"]'));
-  var ifrEllipsoid = Array.from(document.querySelectorAll('iframe[src*="blank-gradient"]'));
+  var ifrStrand = Array.from(
+    document.querySelectorAll(
+      'iframe[src*="orion.html"], iframe[src*="eridanus.html"], iframe[src*="perseus.html"]',
+    ),
+  );
+  var ifrEllipsoid = Array.from(
+    document.querySelectorAll('iframe[src*="andromeda.html"], iframe[src*="reticulum.html"]'),
+  );
 
   function postStrand(msg) {
     ifrStrand.forEach(function (f) {
@@ -35,8 +43,8 @@
       if (Object.prototype.hasOwnProperty.call(payload, k) && k !== "target") msg[k] = payload[k];
     }
     ifrEllipsoid.forEach(function (f) {
-      var isFabric = f.src.indexOf("blank-gradient-fabric.html") !== -1;
-      var isGradient = f.src.indexOf("blank-gradient.html") !== -1 && !isFabric;
+      var isFabric = f.src.indexOf("reticulum.html") !== -1;
+      var isGradient = f.src.indexOf("andromeda.html") !== -1 && !isFabric;
       if (target === "gradient" && !isGradient) return;
       if (target === "fabric" && !isFabric) return;
       try {
@@ -68,6 +76,34 @@
       if (Object.prototype.hasOwnProperty.call(next, k)) merged[k] = next[k];
     }
     localStorage.setItem(FLOW_TUNE_KEY, JSON.stringify(merged));
+  }
+
+  function getDotGridState() {
+    var x = {};
+    try {
+      x = JSON.parse(localStorage.getItem(DOTGRID_KEY) || "{}");
+    } catch (_) {
+      x = {};
+    }
+    return {
+      waves: !!x.waves,
+      spacing: x.spacing === "triangular" ? "triangular" : DOTGRID_DEFAULT.spacing,
+      contrast: Number.isFinite(Number(x.contrast))
+        ? Math.max(0, Math.min(100, Number(x.contrast)))
+        : DOTGRID_DEFAULT.contrast,
+    };
+  }
+
+  function setDotGridState(next) {
+    var cur = getDotGridState();
+    var merged = {
+      waves: next.waves != null ? !!next.waves : cur.waves,
+      spacing: next.spacing === "triangular" ? "triangular" : (next.spacing === "square" ? "square" : cur.spacing),
+      contrast: next.contrast != null
+        ? Math.max(0, Math.min(100, Number(next.contrast)))
+        : cur.contrast,
+    };
+    localStorage.setItem(DOTGRID_KEY, JSON.stringify(merged));
   }
 
   function refreshDockChrome() {
@@ -175,12 +211,17 @@
   function buildEllipsoidControls() {
     var root = document.getElementById("ellipsoid-controls");
     ELLIPSOID.forEach(function (sec) {
-      var h = document.createElement("div");
-      h.className = "dock-subhead";
-      h.textContent = sec.title;
-      root.appendChild(h);
+      var block = document.createElement("details");
+      block.className = "dock-block dock-block--sub";
+      if (sec.title === "Background (canvas)") block.open = true;
+
+      var summary = document.createElement("summary");
+      summary.textContent = sec.title;
+      block.appendChild(summary);
+
       var grid = document.createElement("div");
       grid.className = "ellipsoid-grid";
+      grid.style.marginTop = "10px";
 
       sec.fields.forEach(function (field) {
         if (field.t === "radioBtns") {
@@ -312,9 +353,108 @@
           grid.appendChild(labR);
         }
       });
-
-      root.appendChild(grid);
+      block.appendChild(grid);
+      root.appendChild(block);
     });
+  }
+
+  function buildDotGridMasterControls() {
+    var root = document.getElementById("dotgrid-master-grid");
+    if (!root) return;
+    root.innerHTML = "";
+
+    var waves = document.createElement("label");
+    waves.className = "dock-field";
+    var wavesRow = document.createElement("div");
+    wavesRow.className = "row";
+    wavesRow.style.gap = "10px";
+    var wavesInput = document.createElement("input");
+    wavesInput.type = "checkbox";
+    wavesInput.id = "dotgrid-master-waves";
+    var wavesText = document.createElement("span");
+    wavesText.textContent = "Waves";
+    wavesRow.appendChild(wavesInput);
+    wavesRow.appendChild(wavesText);
+    waves.appendChild(wavesRow);
+    root.appendChild(waves);
+
+    var spacing = document.createElement("label");
+    spacing.className = "dock-field";
+    var spacingTitle = document.createElement("span");
+    spacingTitle.textContent = "Spacing";
+    spacing.appendChild(spacingTitle);
+    var spacingRow = document.createElement("div");
+    spacingRow.className = "row";
+    spacingRow.style.gap = "12px";
+    var spacingSquare = document.createElement("label");
+    spacingSquare.className = "row";
+    spacingSquare.style.gap = "6px";
+    var spacingSquareInput = document.createElement("input");
+    spacingSquareInput.type = "radio";
+    spacingSquareInput.name = "dotgrid-master-spacing";
+    spacingSquareInput.value = "square";
+    var spacingSquareText = document.createElement("span");
+    spacingSquareText.textContent = "Square";
+    spacingSquare.appendChild(spacingSquareInput);
+    spacingSquare.appendChild(spacingSquareText);
+    var spacingTri = document.createElement("label");
+    spacingTri.className = "row";
+    spacingTri.style.gap = "6px";
+    var spacingTriInput = document.createElement("input");
+    spacingTriInput.type = "radio";
+    spacingTriInput.name = "dotgrid-master-spacing";
+    spacingTriInput.value = "triangular";
+    var spacingTriText = document.createElement("span");
+    spacingTriText.textContent = "Triangular";
+    spacingTri.appendChild(spacingTriInput);
+    spacingTri.appendChild(spacingTriText);
+    spacingRow.appendChild(spacingSquare);
+    spacingRow.appendChild(spacingTri);
+    spacing.appendChild(spacingRow);
+    root.appendChild(spacing);
+
+    var contrast = document.createElement("label");
+    contrast.className = "dock-field";
+    var contrastTitle = document.createElement("span");
+    contrastTitle.textContent = "Contrast";
+    var contrastRow = document.createElement("div");
+    contrastRow.className = "row";
+    var contrastInput = document.createElement("input");
+    contrastInput.type = "range";
+    contrastInput.min = "0";
+    contrastInput.max = "100";
+    contrastInput.step = "1";
+    contrastInput.id = "dotgrid-master-contrast";
+    var contrastVal = document.createElement("span");
+    contrastVal.className = "val";
+    contrastVal.id = "dotgrid-master-contrast-val";
+    contrastRow.appendChild(contrastInput);
+    contrastRow.appendChild(contrastVal);
+    contrast.appendChild(contrastTitle);
+    contrast.appendChild(contrastRow);
+    root.appendChild(contrast);
+
+    function syncUi() {
+      var s = getDotGridState();
+      wavesInput.checked = !!s.waves;
+      spacingSquareInput.checked = s.spacing === "square";
+      spacingTriInput.checked = s.spacing === "triangular";
+      contrastInput.value = String(s.contrast);
+      contrastVal.textContent = String(Math.round(s.contrast));
+    }
+    function applyUi() {
+      setDotGridState({
+        waves: wavesInput.checked,
+        spacing: spacingTriInput.checked ? "triangular" : "square",
+        contrast: Number(contrastInput.value),
+      });
+      syncUi();
+    }
+    wavesInput.addEventListener("change", applyUi);
+    spacingSquareInput.addEventListener("change", applyUi);
+    spacingTriInput.addEventListener("change", applyUi);
+    contrastInput.addEventListener("input", applyUi);
+    syncUi();
   }
 
   document.getElementById("dock-spin").addEventListener("click", function () {
@@ -344,9 +484,23 @@
       syncTuneInputsFromStorage();
       refreshDockChrome();
     }
+    if (e.key === DOTGRID_KEY) {
+      var contrastVal = document.getElementById("dotgrid-master-contrast-val");
+      var waves = document.getElementById("dotgrid-master-waves");
+      var contrast = document.getElementById("dotgrid-master-contrast");
+      var spacingSquare = document.querySelector('input[name="dotgrid-master-spacing"][value="square"]');
+      var spacingTri = document.querySelector('input[name="dotgrid-master-spacing"][value="triangular"]');
+      var s = getDotGridState();
+      if (waves) waves.checked = !!s.waves;
+      if (spacingSquare) spacingSquare.checked = s.spacing === "square";
+      if (spacingTri) spacingTri.checked = s.spacing === "triangular";
+      if (contrast) contrast.value = String(s.contrast);
+      if (contrastVal) contrastVal.textContent = String(Math.round(s.contrast));
+    }
   });
 
   buildTuneGrid();
+  buildDotGridMasterControls();
   buildEllipsoidControls();
   syncTuneInputsFromStorage();
   refreshDockChrome();
