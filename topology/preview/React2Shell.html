@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lyra · zones (dataviz) · Pulse</title>
+    <title>React2Shell · zones (dataviz) · Pulse</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -159,14 +159,47 @@
         stroke: rgba(128, 214, 255, 0.95);
       }
       .node.is-seq-active .node-halo {
-        stroke: url(#node-seq-stroke-grad);
+        stroke: url(#node-threat-stroke-grad);
         stroke-width: 0.22;
-        filter: url(#node-seq-glow);
       }
       .node.is-seq-active .node-dot,
       .node.is-seq-active .node-core {
-        fill: url(#node-seq-core-grad);
-        filter: url(#node-seq-glow);
+        fill: url(#node-threat-core-grad);
+      }
+      .seq-threat-snake {
+        fill: #f95762;
+        fill-opacity: 0.9;
+        pointer-events: none;
+      }
+      .broadcast-trail {
+        fill: none;
+        stroke: url(#broadcast-cisco-grad);
+        stroke-width: 0.12;
+        stroke-linecap: round;
+        opacity: 0.46;
+        pointer-events: none;
+      }
+      .broadcast-packet {
+        fill: #e22386;
+        opacity: 0.98;
+        pointer-events: none;
+      }
+      .broadcast-packet-aura {
+        display: none;
+      }
+      .splunk-sparkle-ray {
+        stroke: url(#broadcast-cisco-grad);
+        stroke-width: 0.14;
+        stroke-linecap: round;
+        opacity: 0.92;
+        mix-blend-mode: screen;
+        pointer-events: none;
+      }
+      .splunk-sparkle-core {
+        fill: url(#broadcast-cisco-grad);
+        opacity: 0.98;
+        mix-blend-mode: screen;
+        pointer-events: none;
       }
 
       /* ─── Inline editor ─── */
@@ -230,7 +263,7 @@
       .toast {
         position: fixed;
         left: 50%;
-        bottom: 72px;
+        bottom: clamp(120px, 30vh, 280px);
         transform: translateX(-50%);
         z-index: 30;
         padding: 8px 14px;
@@ -282,17 +315,48 @@
         background: rgba(255, 255, 255, 0.06);
       }
 
-      /* ─── Sequence controls ─── */
-      .seq-chip-row {
+      /* ─── Sequence controls + chrome: one column so chips never sit over buttons/nav ─── */
+      .chrome-stack {
         position: fixed;
         left: 16px;
         right: 16px;
-        bottom: 62px;
+        bottom: 16px;
         z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        max-width: calc(100vw - 32px);
+        box-sizing: border-box;
+      }
+      .chrome-stack .seq-chip-row {
+        position: static;
+        left: auto;
+        right: auto;
+        bottom: auto;
+        z-index: 0;
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
+        min-height: 0;
       }
+      .chrome-stack .seq-chip-row:empty {
+        display: none;
+      }
+      .chrome-stack .chrome {
+        position: relative !important;
+        left: auto !important;
+        bottom: auto !important;
+      }
+      /* Keep canvas links on their own row below all buttons (avoids nav beside Reset / overlap) */
+      .chrome-stack .chrome > .chrome-nav {
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        padding-top: 2px;
+      }
+
       .seq-chip {
         border: 1px solid rgba(255, 255, 255, 0.24);
         background: rgba(7, 24, 45, 0.8);
@@ -311,7 +375,7 @@
       .seq-tuner {
         position: fixed;
         right: 14px;
-        bottom: 62px;
+        bottom: clamp(120px, 26vh, 320px);
         z-index: 8;
         width: min(290px, 86vw);
         padding: 10px;
@@ -346,9 +410,9 @@
       }
     </style>
   </head>
-  <body data-pulse-page="lyra">
+  <body data-pulse-page="react2shell">
     <div class="title-plate">
-      <strong>Lyra</strong> · dataviz
+      <strong>React2Shell</strong> · dataviz
       <span class="tag">BRANCH</span>
       <span class="hint">drag to move · double-click label to edit</span>
     </div>
@@ -360,42 +424,71 @@
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 120 50"
           preserveAspectRatio="xMidYMid meet"
-          aria-label="Lyra — 3-zone logical topology (External · AI · Backend / Data Center)"
+          aria-label="React2Shell — 3-zone logical topology (External · AI · Backend / Data Center)"
         >
           <defs>
-            <radialGradient id="orb-halo-grad" cx="46%" cy="42%" r="66%">
-              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.96" />
-              <stop offset="28%" stop-color="#9be8ff" stop-opacity="0.9" />
-              <stop offset="58%" stop-color="#67d3ff" stop-opacity="0.58" />
-              <stop offset="84%" stop-color="#7f8bff" stop-opacity="0.22" />
-              <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+            <radialGradient id="orb-threat-halo-grad" cx="50%" cy="50%" r="96%">
+              <stop offset="0%" stop-color="#f95762" stop-opacity="0.42" />
+              <stop offset="24%" stop-color="#f95762" stop-opacity="0.68" />
+              <stop offset="56%" stop-color="#f95762" stop-opacity="0.52" />
+              <stop offset="84%" stop-color="#f95762" stop-opacity="0.18" />
+              <stop offset="100%" stop-color="#f95762" stop-opacity="0" />
             </radialGradient>
-            <radialGradient id="orb-core-grad" cx="42%" cy="40%" r="62%">
-              <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
-              <stop offset="45%" stop-color="#e8f8ff" stop-opacity="0.98" />
-              <stop offset="100%" stop-color="#8fdcff" stop-opacity="0.92" />
-            </radialGradient>
-            <radialGradient id="node-seq-core-grad" cx="42%" cy="40%" r="66%">
-              <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
-              <stop offset="52%" stop-color="#d9f6ff" stop-opacity="0.98" />
-              <stop offset="100%" stop-color="#7ed9ff" stop-opacity="0.95" />
-            </radialGradient>
-            <linearGradient id="node-seq-stroke-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#b4f2ff" stop-opacity="1" />
-              <stop offset="55%" stop-color="#80e1ff" stop-opacity="0.95" />
-              <stop offset="100%" stop-color="#d3b6ff" stop-opacity="0.92" />
+            <linearGradient id="orb-threat-tail-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#f95762" stop-opacity="0" />
+              <stop offset="35%" stop-color="#f95762" stop-opacity="0.34" />
+              <stop offset="100%" stop-color="#f95762" stop-opacity="0.92" />
             </linearGradient>
-            <filter id="orb-glow" x="-300%" y="-300%" width="700%" height="700%">
-              <feGaussianBlur stdDeviation="1.7" result="blur" />
+            <radialGradient id="node-threat-core-grad" cx="42%" cy="40%" r="66%">
+              <stop offset="0%" stop-color="#ffd5d8" stop-opacity="1" />
+              <stop offset="52%" stop-color="#fb7b83" stop-opacity="0.98" />
+              <stop offset="100%" stop-color="#f95762" stop-opacity="0.95" />
+            </radialGradient>
+            <linearGradient id="node-threat-stroke-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#ffadb3" stop-opacity="1" />
+              <stop offset="55%" stop-color="#f95762" stop-opacity="0.96" />
+              <stop offset="100%" stop-color="#ff7e85" stop-opacity="0.92" />
+            </linearGradient>
+            <linearGradient id="broadcast-cisco-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#00bceb" stop-opacity="0.95" />
+              <stop offset="55%" stop-color="#e22386" stop-opacity="0.9" />
+              <stop offset="100%" stop-color="#ff8200" stop-opacity="0.95" />
+            </linearGradient>
+            <radialGradient id="broadcast-cisco-radial" cx="50%" cy="50%" r="62%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.24" />
+              <stop offset="32%" stop-color="#00bceb" stop-opacity="0.56" />
+              <stop offset="66%" stop-color="#e22386" stop-opacity="0.46" />
+              <stop offset="100%" stop-color="#ff8200" stop-opacity="0" />
+            </radialGradient>
+            <filter id="orb-glow" x="-460%" y="-460%" width="1020%" height="1020%">
+              <feGaussianBlur stdDeviation="3.8" result="blur" />
+              <feColorMatrix
+                in="blur"
+                type="matrix"
+                values="1 0 0 0 0
+                        0 1 0 0 0
+                        0 0 1 0 0
+                        0 0 0 1.2 0"
+                result="diffused"
+              />
+              <feGaussianBlur in="diffused" stdDeviation="0.9" result="softened" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="soft-core" />
               <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
+                <feMergeNode in="softened" />
+                <feMergeNode in="soft-core" />
               </feMerge>
             </filter>
             <filter id="node-seq-glow" x="-280%" y="-280%" width="640%" height="640%">
-              <feGaussianBlur stdDeviation="1.25" result="nb" />
+              <feGaussianBlur stdDeviation="2.5" result="nb" />
               <feMerge>
                 <feMergeNode in="nb" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="broadcast-glow" x="-320%" y="-320%" width="760%" height="760%">
+              <feGaussianBlur stdDeviation="1.35" result="bg" />
+              <feMerge>
+                <feMergeNode in="bg" />
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
@@ -409,60 +502,89 @@
       </div>
     </div>
 
-    <div class="chrome" role="toolbar" aria-label="Lyra controls">
-      <button type="button" id="btn-connect" class="is-active">Connect: On</button>
-      <button type="button" id="btn-seq-record">Seq record: Off</button>
-      <button type="button" id="btn-seq-save">Save sequence</button>
-      <button type="button" id="btn-seq-tuner">Sequence tuner</button>
-      <button type="button" id="btn-clear-edges">Clear strands</button>
-      <button type="button" id="btn-copy">Copy data</button>
-      <button type="button" id="btn-reset">Reset</button>
-      <nav class="chrome-nav" aria-label="Pulse canvas views">
-        <span class="sep" aria-hidden="true">·</span>
-        <a class="chrome-nav__link" data-pulse-page="orion" href="orion.html">Orion · classic</a>
-        <span class="sep" aria-hidden="true">·</span>
-        <a class="chrome-nav__link" data-pulse-page="eridanus" href="eridanus.html">Eridanus · field</a>
-        <span class="sep" aria-hidden="true">·</span>
-        <a class="chrome-nav__link" data-pulse-page="andromeda" href="andromeda.html">Andromeda · gradient</a>
-        <span class="sep" aria-hidden="true">·</span>
-        <a class="chrome-nav__link" data-pulse-page="reticulum" href="reticulum.html">Reticulum · fabric</a>
-        <span class="sep" aria-hidden="true">·</span>
-        <a class="chrome-nav__link" data-pulse-page="perseus" href="perseus.html">Perseus · generative</a>
-        <span class="sep" aria-hidden="true">·</span>
-        <a class="chrome-nav__link" data-pulse-page="coma-berenices" href="coma-berenices.html">Coma Berenices · grid</a>
-        <span class="sep" aria-hidden="true">·</span>
-        <a class="chrome-nav__link" data-pulse-page="ophiuchus" href="ophiuchus.html">Ophiuchus · topology</a>
-        <span class="sep" aria-hidden="true">·</span>
-        <a class="chrome-nav__link" data-pulse-page="lyra" href="lyra.html">Lyra · zones</a>
-      </nav>
+    <div class="chrome-stack">
+      <div id="seq-chip-row" class="seq-chip-row"></div>
+      <div class="chrome" role="toolbar" aria-label="React2Shell controls">
+        <button type="button" id="btn-connect" class="is-active">Connect: On</button>
+        <button type="button" id="btn-seq-record">Seq record: Off</button>
+        <button type="button" id="btn-seq-save">Save sequence</button>
+        <button type="button" id="btn-seq-tuner">Sequence tuner</button>
+        <button type="button" id="btn-clear-edges">Clear strands</button>
+        <button type="button" id="btn-copy">Copy data</button>
+        <button
+          type="button"
+          id="btn-save-default"
+          title="Store this layout as the default for React2Shell (all entry points on this browser)"
+        >
+          Save as default
+        </button>
+        <button type="button" id="btn-reset">Reset</button>
+        <nav class="chrome-nav" aria-label="Pulse canvas views">
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="orion" href="orion.html">Orion · classic</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="eridanus" href="eridanus.html">Eridanus · field</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="andromeda" href="andromeda.html">Andromeda · gradient</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="reticulum" href="reticulum.html">Reticulum · fabric</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="perseus" href="perseus.html">Perseus · generative</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="coma-berenices" href="coma-berenices.html">Coma Berenices · grid</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="ophiuchus" href="ophiuchus.html">Ophiuchus · topology</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="chrome-nav__link" data-pulse-page="react2shell" href="React2Shell.html">React2Shell · zones</a>
+        </nav>
+      </div>
     </div>
 
     <div id="toast" class="toast">Copied</div>
     <div id="ctx-menu" class="ctx-menu" hidden></div>
-    <div id="seq-chip-row" class="seq-chip-row"></div>
     <aside id="seq-tuner" class="seq-tuner" hidden>
       <h3 class="seq-tuner__title">Sequence Tuner</h3>
       <div class="seq-tuner__row">
         <label>Travel speed <span id="seq-speed-val"></span></label>
-        <input id="seq-speed" type="range" min="6" max="60" step="1" value="24" />
+        <input id="seq-speed" type="range" min="6" max="60" step="1" value="12" />
       </div>
       <div class="seq-tuner__row">
         <label>Path ease <span id="seq-ease-val"></span></label>
-        <input id="seq-ease" type="range" min="0" max="1" step="0.05" value="0.35" />
+        <input id="seq-ease" type="range" min="0" max="1" step="0.05" value="0.1" />
       </div>
       <div class="seq-tuner__row">
         <label>Glow size <span id="seq-glow-val"></span></label>
-        <input id="seq-glow" type="range" min="0.2" max="2.2" step="0.05" value="1.0" />
+        <input id="seq-glow" type="range" min="0.2" max="2.2" step="0.05" value="0.5" />
       </div>
       <div class="seq-tuner__row">
         <label>Glow intensity <span id="seq-intensity-val"></span></label>
-        <input id="seq-intensity" type="range" min="0.2" max="1.6" step="0.05" value="0.9" />
+        <input id="seq-intensity" type="range" min="0.2" max="1.6" step="0.05" value="1.6" />
+      </div>
+      <div class="seq-tuner__row">
+        <label>Snake width <span id="seq-snake-width-val"></span></label>
+        <input id="seq-snake-width" type="range" min="1.2" max="6" step="0.1" value="4" />
+      </div>
+      <div class="seq-tuner__row">
+        <label>Snake length <span id="seq-snake-length-val"></span></label>
+        <input id="seq-snake-length" type="range" min="0.25" max="0.9" step="0.01" value="0.52" />
+      </div>
+      <div class="seq-tuner__row">
+        <label>Particle density <span id="seq-particle-density-val"></span></label>
+        <input id="seq-particle-density" type="range" min="0.25" max="4" step="0.05" value="1" />
+      </div>
+      <div class="seq-tuner__row">
+        <label>Particle size <span id="seq-particle-size-val"></span></label>
+        <input id="seq-particle-size" type="range" min="0.4" max="2.4" step="0.05" value="1.25" />
+      </div>
+      <div class="seq-tuner__row">
+        <label>Broadcast pace <span id="seq-broadcast-pace-val"></span></label>
+        <input id="seq-broadcast-pace" type="range" min="0.4" max="2.4" step="0.05" value="1" />
       </div>
     </aside>
 
     <script>
       /*
-       * Lyra — dataviz pass
+       * React2Shell — dataviz pass
        *   • White dots + thin white strands
        *   • Editorial labels (IBM Plex Sans / Mono)
        *   • Drag nodes · double-click label (or kind) to rename
@@ -517,28 +639,41 @@
       // lp = label position: 'left' | 'right' | 'top' | 'bottom'
       const INITIAL_NODES = [
         // External zone
-        { id: "external-user", label: "External User", kind: "User · entry", zone: "external", x: 10, y: 14, lp: "right" },
-        { id: "entry-point",   label: "Entry Point",   kind: "Edge / DNS",   zone: "external", x: 10, y: 26, lp: "right" },
-        { id: "ext-lb",        label: "Load Balancer", kind: "External LB",  zone: "external", x: 29, y: 20, lp: "left" },
-        { id: "fw-node",       label: "FW",            kind: "Firewall",      zone: "external", x: 40, y: 25, lp: "bottom" },
+        { id: "external-user", label: "External User", kind: "User · partner · internet", zone: "external", x: 10, y: 11, lp: "right" },
+        { id: "entry-point", label: "Entry Point", kind: "NAT / gateway", zone: "external", x: 16, y: 20, lp: "right" },
+        { id: "ext-lb", label: "Load Balancer", kind: "External LB", zone: "external", x: 29, y: 26, lp: "left" },
+        { id: "adc", label: "ADC", kind: "App delivery", zone: "external", x: 30, y: 35, lp: "right" },
 
-        // AI zone
-        { id: "adc",           label: "ADC",            kind: "App delivery",       zone: "ai", x: 52, y: 14, lp: "right" },
-        { id: "ai-switch",     label: "Smart Switch",   kind: "L2/L3 · telemetry",  zone: "ai", x: 60, y: 26, lp: "right" },
-        { id: "ai-app",        label: "AI App Server",  kind: "Inference · agent",  zone: "ai", x: 60, y: 38, lp: "right" },
-        { id: "ips-node",      label: "IPS",            kind: "Intrusion prev.",     zone: "ai", x: 80, y: 25, lp: "bottom" },
+        // Divider + AI zone
+        { id: "fw-node", label: "FW", kind: "Firewall", zone: "external", x: 40, y: 46, lp: "bottom" },
+        { id: "dc-app", label: "App Server", kind: "Service tier", zone: "ai", x: 60, y: 17, lp: "right" },
+        { id: "ai-app", label: "AI App Server", kind: "Inference · agent", zone: "ai", x: 60, y: 33, lp: "right" },
+        { id: "splunk", label: "Splunk", kind: "SIEM / telemetry", zone: "ai", x: 60, y: 46.5, lp: "top" },
 
-        // Backend / Data Center
-        { id: "dc-app",        label: "App Server",     kind: "Service tier",       zone: "backend", x: 93, y: 14, lp: "right" },
-        { id: "dc-db",         label: "Datastore / DB", kind: "System of record",   zone: "backend", x: 93, y: 26, lp: "right" },
-        { id: "dc-switch",     label: "Smart Switch",   kind: "L2/L3 · ToR",        zone: "backend", x: 110, y: 22, lp: "left" },
-        { id: "splunk",        label: "Splunk",         kind: "ES · SOAR · index",  zone: "backend", x: 102, y: 38, lp: "top" },
+        // Backend / Data Center + divider
+        { id: "dc-db", label: "Datastore / DB", kind: "System of record", zone: "backend", x: 94, y: 13, lp: "right" },
+        { id: "dc-switch", label: "Smart Switch", kind: "L2/L3 · ToR", zone: "backend", x: 110, y: 22, lp: "left" },
+        { id: "backend-db", label: "Backend DB", kind: "Database tier", zone: "backend", x: 89, y: 34, lp: "right" },
+        { id: "ips-node", label: "IPS", kind: "Intrusion prev.", zone: "ai", x: 80, y: 46, lp: "bottom" },
       ];
 
       // ─── Edges ──────────────────────────────────────────────────────
-      // start with no strands; click nodes in Connect mode to add
       // kind: 'solid' | 'dashed'
-      const INITIAL_EDGES = [];
+      const INITIAL_EDGES = [
+        { from: "external-user", to: "entry-point", kind: "solid" },
+        { from: "entry-point", to: "ext-lb", kind: "solid" },
+        { from: "ext-lb", to: "adc", kind: "solid" },
+        { from: "ext-lb", to: "ai-app", kind: "solid", crosses: "fw" },
+        { from: "ai-app", to: "backend-db", kind: "solid", crosses: "ips" },
+        { from: "backend-db", to: "dc-switch", kind: "solid" },
+        { from: "dc-switch", to: "dc-db", kind: "solid" },
+        { from: "dc-db", to: "ai-app", kind: "solid", crosses: "ips" },
+        { from: "ai-app", to: "external-user", kind: "solid", crosses: "fw" },
+        { from: "adc", to: "splunk", kind: "solid", crosses: "fw" },
+        { from: "fw-node", to: "splunk", kind: "solid" },
+        { from: "ips-node", to: "splunk", kind: "solid" },
+        { from: "dc-switch", to: "splunk", kind: "solid", crosses: "ips" },
+      ];
 
       // Live working copies (drag / edit mutate these)
       let NODES = INITIAL_NODES.map((n) => ({ ...n }));
@@ -555,15 +690,57 @@
       let sequenceCounter = 0;
       let activeSequenceId = null;
       let playback = null;
-      const sequenceSettings = {
-        speed: 24,
+      const DEFAULT_SEQUENCE_SETTINGS = {
+        speed: 12,
         /** 0 = linear along strand, 1 = full cubic ease-in-out */
-        ease: 0.35,
-        glow: 1,
-        intensity: 0.9,
+        ease: 0.1,
+        glow: 0.5,
+        intensity: 1.6,
+        snakeWidthMult: 4,
+        snakeLengthFactor: 0.52,
+        particleDensity: 1,
+        particleSize: 1.25,
+        broadcastPace: 1,
       };
+      const sequenceSettings = { ...DEFAULT_SEQUENCE_SETTINGS };
+      const GLOW_GLOBAL_MULTIPLIER = 2;
       const NODE_BEAT_MS = 220;
-      const STORAGE_KEY = "pulse.lyra.topology.v1";
+      const BROADCAST_BASE_MS = 1650;
+      const SPLUNK_NODE_ID = "splunk";
+      const PERF_PROFILE = (() => {
+        const cores = navigator.hardwareConcurrency || 4;
+        const mem = navigator.deviceMemory || 4;
+        if (cores <= 4 || mem <= 4) return "low";
+        if (cores <= 8 || mem <= 8) return "medium";
+        return "high";
+      })();
+      const BROADCAST_BASE_PARTICLES =
+        PERF_PROFILE === "low" ? 56 : PERF_PROFILE === "medium" ? 72 : 88;
+      const MAX_CONCURRENT_BROADCASTS =
+        PERF_PROFILE === "low" ? 2 : PERF_PROFILE === "medium" ? 3 : 5;
+      const BROADCAST_TRAIL_WOBBLE_SCALE =
+        PERF_PROFILE === "low" ? 0.65 : PERF_PROFILE === "medium" ? 0.82 : 1;
+      const STORAGE_KEY = "pulse.react2shell.topology.v1";
+      /** User-authored default: used when session storage is empty, and as Reset target. */
+      const BASELINE_KEY = "pulse.react2shell.baseline.v1";
+      let activeBroadcastCount = 0;
+      let lastSplunkSparkleTs = 0;
+
+      function hexToRgb(hex) {
+        const h = hex.replace("#", "");
+        const n = parseInt(h, 16);
+        return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+      }
+
+      function mixColor(aHex, bHex, t) {
+        const a = hexToRgb(aHex);
+        const b = hexToRgb(bHex);
+        const u = Math.min(1, Math.max(0, t));
+        const r = Math.round(a.r + (b.r - a.r) * u);
+        const g = Math.round(a.g + (b.g - a.g) * u);
+        const bch = Math.round(a.b + (b.b - a.b) * u);
+        return `rgb(${r}, ${g}, ${bch})`;
+      }
 
       /** 0→1 smooth: slow leave / slow arrive (cubic ease-in-out along each strand) */
       function easeInOutCubic(t) {
@@ -599,88 +776,121 @@
         node.textContent = str;
       }
 
+      function buildSnapshotPayload() {
+        return {
+          nodes: NODES.map(({ id, label, kind, zone, x, y, lp }) => ({
+            id,
+            label,
+            kind,
+            zone,
+            x,
+            y,
+            lp,
+          })),
+          edges: EDGES.map(({ from, to, kind, crosses }) => ({
+            from,
+            to,
+            kind,
+            ...(crosses ? { crosses } : {}),
+          })),
+          sequences: sequences.map((s) => ({ id: s.id, nodes: [...s.nodes] })),
+          sequenceCounter,
+          settings: { ...sequenceSettings },
+        };
+      }
+
       function persistState() {
         try {
-          const payload = {
-            nodes: NODES.map(({ id, label, kind, zone, x, y, lp }) => ({
-              id,
-              label,
-              kind,
-              zone,
-              x,
-              y,
-              lp,
-            })),
-            edges: EDGES.map(({ from, to, kind, crosses }) => ({
-              from,
-              to,
-              kind,
-              ...(crosses ? { crosses } : {}),
-            })),
-            sequences: sequences.map((s) => ({ id: s.id, nodes: [...s.nodes] })),
-            sequenceCounter,
-            settings: { ...sequenceSettings },
-          };
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(buildSnapshotPayload()));
         } catch (_) {
           // Ignore storage failures (private mode/quota/etc).
         }
       }
 
-      function loadPersistedState() {
+      function applySnapshotData(data) {
+        if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+          return false;
+        }
+
+        NODES = data.nodes.map((n) => ({
+          id: String(n.id || ""),
+          label: String(n.label || ""),
+          kind: String(n.kind || ""),
+          zone: String(n.zone || "external"),
+          x: Number.isFinite(n.x) ? n.x : 10,
+          y: Number.isFinite(n.y) ? n.y : 10,
+          lp: ["left", "right", "top", "bottom"].includes(n.lp) ? n.lp : "right",
+        }));
+        EDGES = data.edges
+          .filter((e) => e && e.from && e.to)
+          .map((e) => ({
+            from: String(e.from),
+            to: String(e.to),
+            kind: e.kind === "dashed" ? "dashed" : "solid",
+            ...(e.crosses ? { crosses: String(e.crosses) } : {}),
+          }));
+        sequences = Array.isArray(data.sequences)
+          ? data.sequences
+              .filter((s) => s && s.id && Array.isArray(s.nodes))
+              .map((s) => ({ id: String(s.id), nodes: s.nodes.map(String) }))
+              .filter((s) => s.nodes.length >= 2)
+          : [];
+        sequenceCounter = Number.isFinite(data.sequenceCounter)
+          ? Number(data.sequenceCounter)
+          : sequences.length;
+        if (data.settings) {
+          const s = data.settings;
+          if (Number.isFinite(s.speed)) sequenceSettings.speed = s.speed;
+          if (Number.isFinite(s.ease)) sequenceSettings.ease = Math.min(1, Math.max(0, s.ease));
+          if (Number.isFinite(s.glow)) sequenceSettings.glow = s.glow;
+          if (Number.isFinite(s.intensity)) sequenceSettings.intensity = s.intensity;
+          if (Number.isFinite(s.snakeWidthMult))
+            sequenceSettings.snakeWidthMult = Math.min(6, Math.max(1.2, s.snakeWidthMult));
+          if (Number.isFinite(s.snakeLengthFactor))
+            sequenceSettings.snakeLengthFactor = Math.min(0.9, Math.max(0.25, s.snakeLengthFactor));
+          if (Number.isFinite(s.particleDensity))
+            sequenceSettings.particleDensity = Math.min(4, Math.max(0.25, s.particleDensity));
+          if (Number.isFinite(s.particleSize))
+            sequenceSettings.particleSize = Math.min(2.4, Math.max(0.4, s.particleSize));
+          if (Number.isFinite(s.broadcastPace))
+            sequenceSettings.broadcastPace = Math.min(2.4, Math.max(0.4, s.broadcastPace));
+        }
+
+        nodeIndex = new Map(NODES.map((n) => [n.id, n]));
+        const maxGeneratedId = NODES.reduce((max, n) => {
+          const m = /^node-(\d+)$/.exec(n.id);
+          return m ? Math.max(max, Number(m[1])) : max;
+        }, 0);
+        nodeCounter = Math.max(NODES.length, maxGeneratedId);
+        return true;
+      }
+
+      function tryLoadSnapshotKey(key) {
         try {
-          const raw = localStorage.getItem(STORAGE_KEY);
+          const raw = localStorage.getItem(key);
           if (!raw) return false;
           const data = JSON.parse(raw);
-          if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
-            return false;
-          }
-
-          NODES = data.nodes.map((n) => ({
-            id: String(n.id || ""),
-            label: String(n.label || ""),
-            kind: String(n.kind || ""),
-            zone: String(n.zone || "external"),
-            x: Number.isFinite(n.x) ? n.x : 10,
-            y: Number.isFinite(n.y) ? n.y : 10,
-            lp: ["left", "right", "top", "bottom"].includes(n.lp) ? n.lp : "right",
-          }));
-          EDGES = data.edges
-            .filter((e) => e && e.from && e.to)
-            .map((e) => ({
-              from: String(e.from),
-              to: String(e.to),
-              kind: e.kind === "dashed" ? "dashed" : "solid",
-              ...(e.crosses ? { crosses: String(e.crosses) } : {}),
-            }));
-          sequences = Array.isArray(data.sequences)
-            ? data.sequences
-                .filter((s) => s && s.id && Array.isArray(s.nodes))
-                .map((s) => ({ id: String(s.id), nodes: s.nodes.map(String) }))
-                .filter((s) => s.nodes.length >= 2)
-            : [];
-          sequenceCounter = Number.isFinite(data.sequenceCounter)
-            ? Number(data.sequenceCounter)
-            : sequences.length;
-          if (data.settings) {
-            if (Number.isFinite(data.settings.speed)) sequenceSettings.speed = data.settings.speed;
-            if (Number.isFinite(data.settings.ease))
-              sequenceSettings.ease = Math.min(1, Math.max(0, data.settings.ease));
-            if (Number.isFinite(data.settings.glow)) sequenceSettings.glow = data.settings.glow;
-            if (Number.isFinite(data.settings.intensity))
-              sequenceSettings.intensity = data.settings.intensity;
-          }
-
-          nodeIndex = new Map(NODES.map((n) => [n.id, n]));
-          const maxGeneratedId = NODES.reduce((max, n) => {
-            const m = /^node-(\d+)$/.exec(n.id);
-            return m ? Math.max(max, Number(m[1])) : max;
-          }, 0);
-          nodeCounter = Math.max(NODES.length, maxGeneratedId);
-          return true;
+          return applySnapshotData(data);
         } catch (_) {
           return false;
         }
+      }
+
+      /** Session snapshot first; otherwise user default; otherwise built-in INITIAL_* (already in memory). */
+      function loadPersistedState() {
+        if (tryLoadSnapshotKey(STORAGE_KEY)) return;
+        tryLoadSnapshotKey(BASELINE_KEY);
+      }
+
+      function saveCurrentAsDefault() {
+        try {
+          const json = JSON.stringify(buildSnapshotPayload());
+          localStorage.setItem(BASELINE_KEY, json);
+          localStorage.setItem(STORAGE_KEY, json);
+        } catch (_) {
+          return false;
+        }
+        return true;
       }
 
       // ─── Zones ─────────────────────────────────────────────────────
@@ -770,32 +980,66 @@
         const L = Math.hypot(dx, dy) || 1;
         return { x: n.x + (dx / L) * EDGE_GAP, y: n.y + (dy / L) * EDGE_GAP };
       }
-      function edgePath(a, b, crosses) {
-        const pa = edgeAnchor(a, b);
-        const pb = edgeAnchor(b, a);
-        if (crosses) {
-          // Arc the strand over the FW/IPS rail
-          const mx = (pa.x + pb.x) / 2;
-          const my = Math.min(pa.y, pb.y) - 3;
-          return `M ${pa.x} ${pa.y} Q ${mx} ${my} ${pb.x} ${pb.y}`;
+      function softRoutedPath(pa, pb, opts = {}) {
+        const dx = pb.x - pa.x;
+        const dy = pb.y - pa.y;
+        const bendSign = opts.bendSign || (dy === 0 ? 1 : Math.sign(dy));
+        const liftBias = opts.liftBias || 0;
+        const totalLen = Math.hypot(dx, dy) || 1;
+        // More pronounced ingress/egress vertical leads.
+        const minLead = totalLen / 6;
+        const maxLead = Math.max(0.62, Math.abs(dy) * 0.58);
+        const verticalLead = Math.min(Math.max(minLead, 1.15), maxLead);
+        const yLead = bendSign * verticalLead + liftBias;
+        const p1 = { x: pa.x, y: pa.y + yLead };
+        const p2 = { x: pb.x, y: pb.y - yLead };
+        // Vertical out -> angled elbow traverse -> vertical in, with pronounced elbow fillets.
+        const lenA = Math.hypot(p1.x - pa.x, p1.y - pa.y);
+        const lenB = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const lenC = Math.hypot(pb.x - p2.x, pb.y - p2.y);
+        const r = Math.min(1.6, lenA * 0.45, lenB * 0.28, lenC * 0.45);
+        if (!(r > 0.04)) {
+          return `M ${pa.x} ${pa.y} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${pb.x} ${pb.y}`;
         }
-        // Otherwise, a lightly-bowed cubic for a "strand" feel
-        const dx = pb.x - pa.x,
-          dy = pb.y - pa.y;
-        const L = Math.hypot(dx, dy) || 1;
-        // Perpendicular offset scaled to length (subtle)
-        const bow = Math.min(1.1, L * 0.04);
-        const nx = -dy / L,
-          ny = dx / L;
-        const c1 = {
-          x: pa.x + dx * 0.33 + nx * bow,
-          y: pa.y + dy * 0.33 + ny * bow,
-        };
-        const c2 = {
-          x: pa.x + dx * 0.66 + nx * bow,
-          y: pa.y + dy * 0.66 + ny * bow,
-        };
-        return `M ${pa.x} ${pa.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${pb.x} ${pb.y}`;
+
+        const uA = { x: (p1.x - pa.x) / lenA, y: (p1.y - pa.y) / lenA };
+        const uB = { x: (p2.x - p1.x) / lenB, y: (p2.y - p1.y) / lenB };
+        const uC = { x: (pb.x - p2.x) / lenC, y: (pb.y - p2.y) / lenC };
+
+        const a1 = { x: p1.x - uA.x * r, y: p1.y - uA.y * r };
+        const b1 = { x: p1.x + uB.x * r, y: p1.y + uB.y * r };
+        const a2 = { x: p2.x - uB.x * r, y: p2.y - uB.y * r };
+        const b2 = { x: p2.x + uC.x * r, y: p2.y + uC.y * r };
+
+        return `M ${pa.x} ${pa.y} L ${a1.x} ${a1.y} Q ${p1.x} ${p1.y} ${b1.x} ${b1.y} L ${a2.x} ${a2.y} Q ${p2.x} ${p2.y} ${b2.x} ${b2.y} L ${pb.x} ${pb.y}`;
+      }
+      function applyEndpointGap(pathEl, d, gap) {
+        const tmp = document.createElementNS(SVG_NS, "path");
+        tmp.setAttribute("d", d);
+        const len = tmp.getTotalLength();
+        if (len <= gap * 2 + 0.01) {
+          pathEl.removeAttribute("stroke-dasharray");
+          pathEl.removeAttribute("stroke-dashoffset");
+          return;
+        }
+        const visible = len - gap * 2;
+        // Keep center-origin curve geometry while preserving the visual clearance at nodes.
+        pathEl.setAttribute("stroke-dasharray", `${visible} ${len}`);
+        pathEl.setAttribute("stroke-dashoffset", String(-gap));
+      }
+      function edgePath(a, b, crosses) {
+        const pa = { x: a.x, y: a.y };
+        const pb = { x: b.x, y: b.y };
+        let laneBias = 0;
+        let liftBias = 0;
+        if (crosses === "fw") {
+          laneBias = -0.95;
+          liftBias = -0.45;
+        } else if (crosses === "ips") {
+          laneBias = 0.95;
+          liftBias = 0.45;
+        }
+        return softRoutedPath(pa, pb, { laneBias, liftBias });
       }
 
       const edgeEls = [];
@@ -846,6 +1090,7 @@
             { d, class: cls },
             layerEdges,
           );
+          applyEndpointGap(p, d, EDGE_GAP);
           const hit = el(
             "path",
             { d, class: "edge-hit", "data-edge-key": edgeKey(e.from, e.to) },
@@ -892,6 +1137,7 @@
               b = nodeIndex.get(e.to);
             const d = edgePath(a, b, e.crosses);
             p.setAttribute("d", d);
+            applyEndpointGap(p, d, EDGE_GAP);
             const hit = p.nextSibling;
             if (hit && hit.classList && hit.classList.contains("edge-hit")) {
               hit.setAttribute("d", d);
@@ -1191,7 +1437,156 @@
         const g = nodeEls.get(id);
         if (!g) return;
         g.classList.add("is-seq-active");
-        setTimeout(() => g.classList.remove("is-seq-active"), 260);
+        emitBroadcastPulse(id);
+        setTimeout(() => g.classList.remove("is-seq-active"), NODE_BEAT_MS * 2);
+      }
+
+      function broadcastPulsePath(from, to) {
+        // Always route to Splunk row first: vertical drop/rise, rounded turn, then across.
+        const x0 = from.x;
+        const y0 = from.y;
+        const x2 = to.x;
+        const y2 = to.y;
+        const sx = x2 >= x0 ? 1 : -1;
+        const sy = y2 >= y0 ? 1 : -1;
+        const r = Math.min(1.35, Math.abs(y2 - y0) * 0.45, Math.abs(x2 - x0) * 0.35);
+        if (r < 0.05) {
+          return `M ${x0} ${y0} L ${x2} ${y2}`;
+        }
+        const pA = { x: x0, y: y2 - sy * r };
+        const pB = { x: x0 + sx * r, y: y2 };
+        return `M ${x0} ${y0} L ${pA.x} ${pA.y} Q ${x0} ${y2} ${pB.x} ${pB.y} L ${x2} ${y2}`;
+      }
+
+      function emitBroadcastPulse(fromId) {
+        if (fromId === SPLUNK_NODE_ID) return;
+        if (activeBroadcastCount >= MAX_CONCURRENT_BROADCASTS) return;
+        const from = nodeIndex.get(fromId);
+        const to = nodeIndex.get(SPLUNK_NODE_ID);
+        if (!from || !to) return;
+        activeBroadcastCount += 1;
+
+        const d = broadcastPulsePath(from, to);
+        const group = el(
+          "g",
+          { style: "mix-blend-mode: screen;" },
+          layerSequence,
+        );
+        const measure = document.createElementNS(SVG_NS, "path");
+        measure.setAttribute("d", d);
+        const length = Math.max(0.001, measure.getTotalLength());
+        const start = performance.now();
+        const broadcastDuration = BROADCAST_BASE_MS / Math.max(0.1, sequenceSettings.broadcastPace);
+        const particleCount = Math.max(
+          4,
+          Math.round(BROADCAST_BASE_PARTICLES * sequenceSettings.particleDensity),
+        );
+        const particles = Array.from({ length: particleCount }, (_, i) => {
+          const seed = Math.random();
+          const particleR = (0.028 + Math.random() * 0.028) * sequenceSettings.particleSize;
+          const circle = el(
+            "circle",
+            {
+              r: particleR.toFixed(3),
+              class: "broadcast-packet",
+            },
+            group,
+          );
+          return {
+            el: circle,
+            phase: (i / particleCount) * 0.74 + seed * 0.05,
+            speed: 0.84 + Math.random() * 0.42,
+            wobblePhase: Math.random() * Math.PI * 2,
+            wobbleAmp: (0.05 + Math.random() * 0.1) * BROADCAST_TRAIL_WOBBLE_SCALE,
+          };
+        });
+        let splunkSparkled = false;
+
+        function tick(now) {
+          const u = Math.min(1, (now - start) / broadcastDuration);
+          const eased = blendPathEase(u, 0.62);
+
+          particles.forEach((p) => {
+            const up = Math.min(1, Math.max(0, eased * p.speed - p.phase));
+            const dist = length * up;
+            const pt = measure.getPointAtLength(dist);
+            const prev = measure.getPointAtLength(Math.max(0, dist - 0.42));
+            const tx = pt.x - prev.x;
+            const ty = pt.y - prev.y;
+            const tLen = Math.hypot(tx, ty) || 1;
+            const nx = -ty / tLen;
+            const ny = tx / tLen;
+            const wobble = Math.sin((u + p.phase) * Math.PI * 5 + p.wobblePhase) * p.wobbleAmp;
+            const px = pt.x + nx * wobble;
+            const py = pt.y + ny * wobble;
+            p.el.setAttribute("cx", String(px));
+            p.el.setAttribute("cy", String(py));
+            p.el.setAttribute("opacity", String(Math.max(0, 0.98 - up * 0.58)));
+            // Shift each packet from magenta -> orange as it travels to Splunk.
+            p.el.setAttribute("fill", mixColor("#e22386", "#ff8200", up));
+          });
+
+          if (!splunkSparkled && eased >= 0.985) {
+            splunkSparkled = true;
+            const nowTs = performance.now();
+            if (nowTs - lastSplunkSparkleTs > 140) {
+              sparkleSplunk();
+              lastSplunkSparkleTs = nowTs;
+            }
+          }
+          if (u < 1) {
+            requestAnimationFrame(tick);
+          } else {
+            group.remove();
+            activeBroadcastCount = Math.max(0, activeBroadcastCount - 1);
+          }
+        }
+        requestAnimationFrame(tick);
+      }
+
+      function sparkleSplunk() {
+        const splunk = nodeIndex.get(SPLUNK_NODE_ID);
+        if (!splunk) return;
+        const group = el(
+          "g",
+          { transform: `translate(${splunk.x} ${splunk.y})` },
+          layerSequence,
+        );
+        const core = el("circle", { r: 0.2, class: "splunk-sparkle-core" }, group);
+        const rays = [0, 45, 90, 135].map((deg) =>
+          el(
+            "line",
+            {
+              x1: 0,
+              y1: -0.34,
+              x2: 0,
+              y2: -1.2,
+              transform: `rotate(${deg})`,
+              class: "splunk-sparkle-ray",
+            },
+            group,
+          ),
+        );
+        const started = performance.now();
+        const duration = 520;
+
+        function tick(now) {
+          const u = Math.min(1, (now - started) / duration);
+          const ease = easeInOutCubic(u);
+          const scale = 0.9 + ease * 1.55;
+          group.setAttribute(
+            "transform",
+            `translate(${splunk.x} ${splunk.y}) scale(${scale}) rotate(${u * 18})`,
+          );
+          core.setAttribute("opacity", String(Math.max(0, 1 - u * 0.72)));
+          core.setAttribute("r", String(0.2 + ease * 0.42));
+          rays.forEach((ray, i) => {
+            ray.setAttribute("opacity", String(Math.max(0, 0.95 - u * (0.72 + i * 0.06))));
+          });
+          if (u < 1) requestAnimationFrame(tick);
+          else group.remove();
+        }
+        requestAnimationFrame(tick);
       }
 
       function onEditText(evt) {
@@ -1214,10 +1609,20 @@
       const seqGlow = document.getElementById("seq-glow");
       const seqIntensity = document.getElementById("seq-intensity");
       const seqEase = document.getElementById("seq-ease");
+      const seqSnakeWidth = document.getElementById("seq-snake-width");
+      const seqSnakeLength = document.getElementById("seq-snake-length");
+      const seqParticleDensity = document.getElementById("seq-particle-density");
+      const seqParticleSize = document.getElementById("seq-particle-size");
+      const seqBroadcastPace = document.getElementById("seq-broadcast-pace");
       const seqSpeedVal = document.getElementById("seq-speed-val");
       const seqEaseVal = document.getElementById("seq-ease-val");
       const seqGlowVal = document.getElementById("seq-glow-val");
       const seqIntensityVal = document.getElementById("seq-intensity-val");
+      const seqSnakeWidthVal = document.getElementById("seq-snake-width-val");
+      const seqSnakeLengthVal = document.getElementById("seq-snake-length-val");
+      const seqParticleDensityVal = document.getElementById("seq-particle-density-val");
+      const seqParticleSizeVal = document.getElementById("seq-particle-size-val");
+      const seqBroadcastPaceVal = document.getElementById("seq-broadcast-pace-val");
       function showToast(msg) {
         toast.textContent = msg;
         toast.classList.add("is-visible");
@@ -1243,40 +1648,100 @@
         if (orb) return orb;
         orb = el("g", { id: "sequence-orb", hidden: "true" }, layerSequence);
         el(
-          "circle",
+          "ellipse",
           {
-            id: "sequence-orb-halo",
-            cx: 0,
+            id: "sequence-orb-tail",
+            cx: -1.5,
             cy: 0,
-            r: 1.2,
-            fill: "url(#orb-halo-grad)",
-            filter: "url(#orb-glow)",
+            rx: 1.8,
+            ry: 0.62,
+            fill: "url(#orb-threat-tail-grad)",
+            style: "mix-blend-mode: screen;",
           },
           orb,
         );
         el(
           "circle",
           {
-            id: "sequence-orb-core",
+            id: "sequence-orb-halo",
             cx: 0,
             cy: 0,
-            r: 0.48,
-            fill: "url(#orb-core-grad)",
-            filter: "url(#orb-glow)",
+            r: 2.2,
+            fill: "url(#orb-threat-halo-grad)",
+            style: "mix-blend-mode: screen;",
           },
           orb,
         );
         return orb;
       }
 
+      function ensureThreatTrace() {
+        let trace = document.getElementById("sequence-threat-trace");
+        if (trace) return trace;
+        trace = el("g", { id: "sequence-threat-trace" }, layerSequence);
+        el("path", { id: "sequence-threat-snake", class: "seq-threat-snake" }, trace);
+        return trace;
+      }
+
+      function smoothstep01(t) {
+        const x = Math.max(0, Math.min(1, t));
+        return x * x * (3 - 2 * x);
+      }
+
+      // Continuous width profile: long tail -> bulge -> sharp leading edge.
+      // Base edge is 0.05; max snake width is 4x = 0.2.
+      function snakeWidthProfile(u) {
+        const x = Math.max(0, Math.min(1, u));
+        const tailRise = Math.pow(x, 0.68); // long, gradual tail
+        const bulge = 0.82 + 0.45 * Math.exp(-Math.pow((x - 0.84) / 0.14, 2));
+        const frontSharp =
+          x < 0.945 ? 1 : Math.max(0, 1 - smoothstep01((x - 0.945) / 0.055));
+        const baseEdgeWidth = 0.05;
+        const maxSnakeWidth = baseEdgeWidth * sequenceSettings.snakeWidthMult;
+        return maxSnakeWidth * tailRise * bulge * frontSharp;
+      }
+
+      function buildSnakeRibbonPath(pathEl, endDist, totalLen) {
+        const snakeLen = Math.max(5.8, totalLen * sequenceSettings.snakeLengthFactor);
+        const startDist = Math.max(0, endDist - snakeLen);
+        const span = Math.max(0.001, endDist - startDist);
+        const steps = 26;
+        const left = [];
+        const right = [];
+        for (let i = 0; i < steps; i++) {
+          const t = i / (steps - 1);
+          const d = startDist + span * t;
+          const p = pathEl.getPointAtLength(d);
+          const p2 = pathEl.getPointAtLength(Math.min(totalLen, d + 0.34));
+          const tx = p2.x - p.x;
+          const ty = p2.y - p.y;
+          const mag = Math.hypot(tx, ty) || 1;
+          const nx = -ty / mag;
+          const ny = tx / mag;
+          const halfW = snakeWidthProfile(t) * 0.5;
+          left.push({ x: p.x + nx * halfW, y: p.y + ny * halfW });
+          right.push({ x: p.x - nx * halfW, y: p.y - ny * halfW });
+        }
+        if (!left.length) return "";
+        let d = `M ${left[0].x} ${left[0].y}`;
+        for (let i = 1; i < left.length; i++) d += ` L ${left[i].x} ${left[i].y}`;
+        for (let i = right.length - 1; i >= 0; i--) d += ` L ${right[i].x} ${right[i].y}`;
+        d += " Z";
+        return d;
+      }
+
       function applyOrbTuning() {
         const halo = document.getElementById("sequence-orb-halo");
-        const core = document.getElementById("sequence-orb-core");
-        if (!halo || !core) return;
-        halo.setAttribute("r", String(1.2 * sequenceSettings.glow));
-        halo.setAttribute("opacity", String(Math.min(1.25, 0.55 * sequenceSettings.intensity)));
-        core.setAttribute("r", String(0.48 + 0.08 * sequenceSettings.intensity));
-        core.setAttribute("opacity", String(Math.min(1.2, 0.9 + 0.2 * sequenceSettings.intensity)));
+        const tail = document.getElementById("sequence-orb-tail");
+        if (!halo || !tail) return;
+        const glowScale = sequenceSettings.glow * GLOW_GLOBAL_MULTIPLIER;
+        const intensityScale = sequenceSettings.intensity * GLOW_GLOBAL_MULTIPLIER;
+        halo.setAttribute("r", String(1.32 * glowScale));
+        halo.setAttribute("opacity", String(Math.min(1.3, 0.82 * intensityScale)));
+        tail.setAttribute("rx", String(1.35 + 1.25 * glowScale));
+        tail.setAttribute("ry", String(0.46 + 0.24 * glowScale));
+        tail.setAttribute("cx", String(-(0.7 + 0.8 * glowScale)));
+        tail.setAttribute("opacity", String(Math.min(1.2, 0.62 + 0.28 * intensityScale)));
       }
 
       function updateTunerReadouts() {
@@ -1284,6 +1749,11 @@
         seqEaseVal.textContent = `${sequenceSettings.ease.toFixed(2)}`;
         seqGlowVal.textContent = `${sequenceSettings.glow.toFixed(2)}x`;
         seqIntensityVal.textContent = `${sequenceSettings.intensity.toFixed(2)}x`;
+        seqSnakeWidthVal.textContent = `${sequenceSettings.snakeWidthMult.toFixed(2)}x`;
+        seqSnakeLengthVal.textContent = `${sequenceSettings.snakeLengthFactor.toFixed(2)}x`;
+        seqParticleDensityVal.textContent = `${sequenceSettings.particleDensity.toFixed(2)}x`;
+        seqParticleSizeVal.textContent = `${sequenceSettings.particleSize.toFixed(2)}x`;
+        seqBroadcastPaceVal.textContent = `${sequenceSettings.broadcastPace.toFixed(2)}x`;
       }
 
       function stopSequencePlayback() {
@@ -1291,6 +1761,8 @@
         playback = null;
         const orb = document.getElementById("sequence-orb");
         if (orb) orb.setAttribute("hidden", "true");
+        const snake = document.getElementById("sequence-threat-snake");
+        if (snake) snake.setAttribute("d", "");
       }
 
       function playSequenceById(id) {
@@ -1325,9 +1797,7 @@
         stopSequencePlayback();
         activeSequenceId = id;
         renderSequenceChips();
-        const orb = ensurePlaybackOrb();
-        orb.removeAttribute("hidden");
-        applyOrbTuning();
+        ensureThreatTrace();
 
         const state = {
           seqId: id,
@@ -1351,8 +1821,6 @@
 
           // Hold orb on the node for a beat.
           if (state.holdAtNodeId) {
-            const n = nodeIndex.get(state.holdAtNodeId);
-            if (n) orb.setAttribute("transform", `translate(${n.x} ${n.y})`);
             if (state.holdUntilTs == null) {
               state.holdUntilTs = ts + NODE_BEAT_MS;
             }
@@ -1374,8 +1842,10 @@
           const uLinear = Math.min(1, state.segmentTimeElapsed / durationSec);
           const uPath = blendPathEase(uLinear, sequenceSettings.ease);
           const clampedDist = seg.len * uPath;
-          const pt = seg.path.getPointAtLength(clampedDist);
-          orb.setAttribute("transform", `translate(${pt.x} ${pt.y})`);
+          const threatSnake = document.getElementById("sequence-threat-snake");
+          if (threatSnake) {
+            threatSnake.setAttribute("d", buildSnakeRibbonPath(seg.path, clampedDist, seg.len));
+          }
 
           if (uLinear >= 1 - 1e-6) {
             // Arrived at next node: settle for a beat.
@@ -1397,6 +1867,32 @@
           b.className = "seq-chip" + (seq.id === activeSequenceId ? " is-active" : "");
           b.textContent = `${seq.id} (${seq.nodes.length})`;
           b.addEventListener("click", () => playSequenceById(seq.id));
+          b.addEventListener("contextmenu", (evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            showContextMenu(evt.clientX, evt.clientY, [
+              {
+                label: "Delete sequence",
+                onClick: () => {
+                  const before = sequences.length;
+                  sequences = sequences.filter((s) => s.id !== seq.id);
+                  if (activeSequenceId === seq.id) {
+                    activeSequenceId = null;
+                    stopSequencePlayback();
+                  }
+                  renderSequenceChips();
+                  persistState();
+                  if (sequences.length < before) {
+                    showToast(`Deleted ${seq.id}`);
+                  }
+                },
+              },
+              {
+                label: "Cancel",
+                onClick: () => {},
+              },
+            ]);
+          });
           seqChipRow.appendChild(b);
         });
       }
@@ -1484,8 +1980,37 @@
         });
       }
 
-      document.getElementById("btn-copy").addEventListener("click", () => {
+      function legacyCopyText(text) {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.top = "0";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        let ok = false;
+        try {
+          ok = document.execCommand("copy");
+        } catch (_) {
+          ok = false;
+        }
+        ta.remove();
+        return ok;
+      }
+
+      document.getElementById("btn-copy").addEventListener("click", async () => {
         const payload = {
+          scenario: {
+            id: "React2Shell",
+            title: "React2Shell · zones",
+            viewBox: "120 50",
+            exportedAt: new Date().toISOString(),
+          },
+          zones: ZONES.map((z) => ({ ...z })),
+          dividers: DIVIDERS.map((d) => ({ ...d })),
           nodes: NODES.map(({ id, label, kind, zone, x, y, lp }) => ({
             id,
             label,
@@ -1502,16 +2027,42 @@
             ...(crosses ? { crosses } : {}),
           })),
           sequences: sequences.map((s) => ({ id: s.id, nodes: [...s.nodes] })),
+          sequenceDraft: [...seqDraft],
+          sequenceCounter,
+          activeSequenceId,
           settings: { ...sequenceSettings },
+          uiState: {
+            connectMode,
+            seqRecordMode,
+            activeSequenceId,
+          },
+          profile: {
+            perf: PERF_PROFILE,
+            maxConcurrentBroadcasts: MAX_CONCURRENT_BROADCASTS,
+            baseBroadcastParticles: BROADCAST_BASE_PARTICLES,
+          },
         };
         const text = JSON.stringify(payload, null, 2);
-        navigator.clipboard
-          .writeText(text)
-          .then(() => showToast("Copied · NODES + EDGES"))
-          .catch(() => {
-            console.log(text);
-            showToast("Copy blocked · logged to console");
-          });
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            showToast("Copied · scenario JSON");
+            return;
+          }
+          if (legacyCopyText(text)) {
+            showToast("Copied · fallback mode");
+            return;
+          }
+          console.log(text);
+          showToast("Copy blocked · JSON in console");
+        } catch (_) {
+          if (legacyCopyText(text)) {
+            showToast("Copied · fallback mode");
+            return;
+          }
+          console.log(text);
+          showToast("Copy blocked · JSON in console");
+        }
       });
 
       const btnConnect = document.getElementById("btn-connect");
@@ -1599,23 +2150,87 @@
         applyOrbTuning();
         persistState();
       });
+      seqSnakeWidth.addEventListener("input", () => {
+        sequenceSettings.snakeWidthMult = Number(seqSnakeWidth.value);
+        updateTunerReadouts();
+        persistState();
+      });
+      seqSnakeLength.addEventListener("input", () => {
+        sequenceSettings.snakeLengthFactor = Number(seqSnakeLength.value);
+        updateTunerReadouts();
+        persistState();
+      });
+      seqParticleDensity.addEventListener("input", () => {
+        sequenceSettings.particleDensity = Number(seqParticleDensity.value);
+        updateTunerReadouts();
+        persistState();
+      });
+      seqParticleSize.addEventListener("input", () => {
+        sequenceSettings.particleSize = Number(seqParticleSize.value);
+        updateTunerReadouts();
+        persistState();
+      });
+      seqBroadcastPace.addEventListener("input", () => {
+        sequenceSettings.broadcastPace = Number(seqBroadcastPace.value);
+        updateTunerReadouts();
+        persistState();
+      });
+
+      document.getElementById("btn-save-default").addEventListener("click", () => {
+        if (saveCurrentAsDefault()) showToast("Saved as default");
+        else showToast("Could not save default");
+      });
 
       document.getElementById("btn-reset").addEventListener("click", () => {
+        stopSequencePlayback();
+        activeSequenceId = null;
+        seqDraft = [];
+        seqRecordMode = false;
+        clearSelection();
+
+        if (tryLoadSnapshotKey(BASELINE_KEY)) {
+          seqSpeed.value = String(sequenceSettings.speed);
+          seqEase.value = String(sequenceSettings.ease);
+          seqGlow.value = String(sequenceSettings.glow);
+          seqIntensity.value = String(sequenceSettings.intensity);
+          seqSnakeWidth.value = String(sequenceSettings.snakeWidthMult);
+          seqSnakeLength.value = String(sequenceSettings.snakeLengthFactor);
+          seqParticleDensity.value = String(sequenceSettings.particleDensity);
+          seqParticleSize.value = String(sequenceSettings.particleSize);
+          seqBroadcastPace.value = String(sequenceSettings.broadcastPace);
+          renderEdges();
+          renderNodes();
+          renderSequenceChips();
+          updateTunerReadouts();
+          applyOrbTuning();
+          updateModeButtons();
+          persistState();
+          showToast("Reset to saved default");
+          return;
+        }
+
         NODES = INITIAL_NODES.map((n) => ({ ...n }));
         EDGES = INITIAL_EDGES.map((e) => ({ ...e }));
         nodeIndex = new Map(NODES.map((n) => [n.id, n]));
         nodeCounter = NODES.length;
-        seqDraft = [];
         sequences = [];
         sequenceCounter = 0;
-        activeSequenceId = null;
-        seqRecordMode = false;
-        stopSequencePlayback();
-        clearSelection();
+        Object.assign(sequenceSettings, DEFAULT_SEQUENCE_SETTINGS);
+        seqSpeed.value = String(sequenceSettings.speed);
+        seqEase.value = String(sequenceSettings.ease);
+        seqGlow.value = String(sequenceSettings.glow);
+        seqIntensity.value = String(sequenceSettings.intensity);
+        seqSnakeWidth.value = String(sequenceSettings.snakeWidthMult);
+        seqSnakeLength.value = String(sequenceSettings.snakeLengthFactor);
+        seqParticleDensity.value = String(sequenceSettings.particleDensity);
+        seqParticleSize.value = String(sequenceSettings.particleSize);
+        seqBroadcastPace.value = String(sequenceSettings.broadcastPace);
         renderEdges();
         renderNodes();
         renderSequenceChips();
         updateTunerReadouts();
+        applyOrbTuning();
+        updateModeButtons();
         persistState();
         showToast("Reset");
       });
@@ -1684,6 +2299,11 @@
       seqEase.value = String(sequenceSettings.ease);
       seqGlow.value = String(sequenceSettings.glow);
       seqIntensity.value = String(sequenceSettings.intensity);
+      seqSnakeWidth.value = String(sequenceSettings.snakeWidthMult);
+      seqSnakeLength.value = String(sequenceSettings.snakeLengthFactor);
+      seqParticleDensity.value = String(sequenceSettings.particleDensity);
+      seqParticleSize.value = String(sequenceSettings.particleSize);
+      seqBroadcastPace.value = String(sequenceSettings.broadcastPace);
       renderZones();
       renderDividers();
       renderEdges();
