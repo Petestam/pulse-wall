@@ -408,6 +408,63 @@
         width: 100%;
         accent-color: rgba(255, 255, 255, 0.95);
       }
+
+      .parallax-particle {
+        pointer-events: none;
+        mix-blend-mode: screen;
+      }
+      #layer-parallax {
+        pointer-events: none;
+      }
+      .parallax-tuner {
+        position: fixed;
+        left: 14px;
+        bottom: clamp(120px, 26vh, 320px);
+        z-index: 8;
+        width: min(290px, 86vw);
+        padding: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.26);
+        border-radius: 4px;
+        background: rgba(7, 24, 45, 0.96);
+        color: rgba(255, 255, 255, 0.9);
+      }
+      .parallax-tuner[hidden] {
+        display: none;
+      }
+      .parallax-tuner__title {
+        margin: 0 0 8px;
+        font: 500 10px "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .parallax-tuner__row {
+        margin: 7px 0;
+      }
+      .parallax-tuner__row label {
+        display: flex;
+        justify-content: space-between;
+        font: 400 10px "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.72);
+      }
+      .parallax-tuner__row input[type="range"] {
+        width: 100%;
+        accent-color: rgba(160, 210, 255, 0.95);
+      }
+      .parallax-tuner__check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font: 400 10px "IBM Plex Mono", ui-monospace, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.78);
+        cursor: pointer;
+      }
+      .parallax-tuner__check input {
+        accent-color: rgba(160, 210, 255, 0.95);
+      }
     </style>
   </head>
   <body data-pulse-page="react2shell">
@@ -496,6 +553,7 @@
           <g id="layer-zones"></g>
           <g id="layer-dividers"></g>
           <g id="layer-edges"></g>
+          <g id="layer-parallax"></g>
           <g id="layer-nodes"></g>
           <g id="layer-sequence"></g>
         </svg>
@@ -509,6 +567,7 @@
         <button type="button" id="btn-seq-record">Seq record: Off</button>
         <button type="button" id="btn-seq-save">Save sequence</button>
         <button type="button" id="btn-seq-tuner">Sequence tuner</button>
+        <button type="button" id="btn-parallax-tuner">Flow tuner</button>
         <button type="button" id="btn-clear-edges">Clear strands</button>
         <button type="button" id="btn-copy">Copy data</button>
         <button
@@ -579,6 +638,56 @@
       <div class="seq-tuner__row">
         <label>Broadcast pace <span id="seq-broadcast-pace-val"></span></label>
         <input id="seq-broadcast-pace" type="range" min="0.4" max="2.4" step="0.05" value="1" />
+      </div>
+    </aside>
+
+    <aside id="parallax-tuner" class="parallax-tuner" hidden>
+      <h3 class="parallax-tuner__title">Ambient flow</h3>
+      <div class="parallax-tuner__row">
+        <label class="parallax-tuner__check">
+          <input type="checkbox" id="parallax-enabled" checked />
+          Enable particle flow
+        </label>
+      </div>
+      <div class="parallax-tuner__row">
+        <label>Flow speed <span id="parallax-flow-val"></span></label>
+        <input id="parallax-flow" type="range" min="0" max="78" step="1" value="16" />
+      </div>
+      <div class="parallax-tuner__row">
+        <label>Density <span id="parallax-density-val"></span></label>
+        <input
+          id="parallax-density"
+          type="range"
+          min="0"
+          max="10"
+          step="0.05"
+          value="0.42"
+          title="Particle count scale 0–10× (capped for performance at very high values)"
+        />
+      </div>
+      <div class="parallax-tuner__row">
+        <label>Opacity <span id="parallax-opacity-val"></span></label>
+        <input id="parallax-opacity" type="range" min="0" max="0.92" step="0.01" value="0.2" />
+      </div>
+      <div class="parallax-tuner__row">
+        <label>Edge drift <span id="parallax-drift-val"></span></label>
+        <input id="parallax-drift" type="range" min="0" max="2.2" step="0.02" value="0.35" />
+      </div>
+      <div class="parallax-tuner__row">
+        <label>Speed variance <span id="parallax-shift-val"></span></label>
+        <input
+          id="parallax-shift"
+          type="range"
+          min="0"
+          max="2.75"
+          step="0.02"
+          value="0.55"
+          title="How much each particle’s speed differs from the others (0 = uniform; uses flow slider as baseline)"
+        />
+      </div>
+      <div class="parallax-tuner__row">
+        <label>Particle size <span id="parallax-size-val"></span></label>
+        <input id="parallax-size" type="range" min="0.02" max="0.52" step="0.01" value="0.1" />
       </div>
     </aside>
 
@@ -703,6 +812,21 @@
         broadcastPace: 1,
       };
       const sequenceSettings = { ...DEFAULT_SEQUENCE_SETTINGS };
+      /** Ambient flow density slider max (×); slot count scales with value up to `PARALLAX_PARTICLE_SLOT_CAP`. */
+      const PARALLAX_DENSITY_MAX = 10;
+      const PARALLAX_PARTICLE_SLOT_CAP = 1600;
+      const DEFAULT_PARALLAX_SETTINGS = {
+        enabled: true,
+        flow: 16,
+        /** 0–10× on the Flow tuner slider; ~1× ≈ previous default look. */
+        density: 0.42,
+        opacity: 0.2,
+        drift: 0.35,
+        /** Per-particle speed spread (edge flow + orbit); not pointer-based. */
+        parallax: 0.55,
+        size: 0.1,
+      };
+      const parallaxSettings = { ...DEFAULT_PARALLAX_SETTINGS };
       const GLOW_GLOBAL_MULTIPLIER = 2;
       const NODE_BEAT_MS = 220;
       const BROADCAST_BASE_MS = 1650;
@@ -763,6 +887,7 @@
       const layerEdges = document.getElementById("layer-edges");
       const layerNodes = document.getElementById("layer-nodes");
       const layerSequence = document.getElementById("layer-sequence");
+      const layerParallax = document.getElementById("layer-parallax");
 
       function el(name, attrs = {}, parent) {
         const node = document.createElementNS(SVG_NS, name);
@@ -802,6 +927,7 @@
           sequenceDraft: [...seqDraft],
           activeSequenceId,
           settings: { ...sequenceSettings },
+          parallax: { ...parallaxSettings },
         };
       }
 
@@ -873,6 +999,17 @@
             sequenceSettings.particleSize = Math.min(2.4, Math.max(0.4, s.particleSize));
           if (Number.isFinite(s.broadcastPace))
             sequenceSettings.broadcastPace = Math.min(2.4, Math.max(0.4, s.broadcastPace));
+        }
+        if (data.parallax && typeof data.parallax === "object") {
+          const px = data.parallax;
+          if (typeof px.enabled === "boolean") parallaxSettings.enabled = px.enabled;
+          if (Number.isFinite(px.flow)) parallaxSettings.flow = Math.min(78, Math.max(0, px.flow));
+          if (Number.isFinite(px.density))
+            parallaxSettings.density = Math.min(PARALLAX_DENSITY_MAX, Math.max(0, px.density));
+          if (Number.isFinite(px.opacity)) parallaxSettings.opacity = Math.min(0.92, Math.max(0, px.opacity));
+          if (Number.isFinite(px.drift)) parallaxSettings.drift = Math.min(2.2, Math.max(0, px.drift));
+          if (Number.isFinite(px.parallax)) parallaxSettings.parallax = Math.min(2.75, Math.max(0, px.parallax));
+          if (Number.isFinite(px.size)) parallaxSettings.size = Math.min(0.52, Math.max(0.02, px.size));
         }
 
         nodeIndex = new Map(NODES.map((n) => [n.id, n]));
@@ -1159,6 +1296,7 @@
           });
           edgeEls.push({ e, el: p });
         });
+        rebuildParallaxFlow();
       }
       function updateEdgesFor(id) {
         edgeEls.forEach(({ e, el: p }) => {
@@ -1174,6 +1312,164 @@
             }
           }
         });
+      }
+
+      // ─── Ambient parallax particles (edges + soft node orbits) ─────
+      let parallaxParticles = [];
+      let parallaxRafId = null;
+      let parallaxLastT = 0;
+
+      /** Random multiplier ~1 when variance is 0; wider spread when `parallaxSettings.parallax` is high. */
+      function sampleParallaxSpeedMul() {
+        const v = parallaxSettings.parallax;
+        if (!(v > 0)) return 1;
+        const spread = v * 0.34;
+        const u = Math.random() * 2 - 1;
+        return Math.max(0.16, Math.min(2.45, 1 + u * spread));
+      }
+
+      function stopParallaxLoop() {
+        if (parallaxRafId != null) {
+          cancelAnimationFrame(parallaxRafId);
+          parallaxRafId = null;
+        }
+      }
+
+      function tickParallax(t) {
+        if (!parallaxSettings.enabled || parallaxParticles.length === 0) {
+          parallaxRafId = null;
+          return;
+        }
+        const dt = Math.min(0.056, (t - parallaxLastT) / 1000);
+        parallaxLastT = t;
+
+        const flow = parallaxSettings.flow;
+        const baseOp = parallaxSettings.opacity;
+        const drift = parallaxSettings.drift;
+        const baseR = parallaxSettings.size;
+
+        parallaxParticles.forEach((p) => {
+          const rMul = Number(p.el.dataset.rMul) || 1;
+          if (p.kind === "edge") {
+            if (!p.path || !p.path.isConnected) return;
+            const len = p.path.getTotalLength() || 0.001;
+            const delta =
+              ((flow * 0.38 * dt) / Math.max(5.5, len * 0.18)) * p.vy * (p.speedMul || 1);
+            p.s += delta * p.dir;
+            while (p.s < 0) p.s += len;
+            while (p.s >= len) p.s -= len;
+            const pt = p.path.getPointAtLength(p.s);
+            let ox = 0;
+            let oy = 0;
+            if (drift > 0.018) {
+              const eps = Math.min(0.42, len * 0.045);
+              const s1 =
+                p.dir >= 0
+                  ? Math.min(len - 1e-4, p.s + eps)
+                  : Math.max(0, p.s - eps);
+              const p1 = p.path.getPointAtLength(s1);
+              const ang = Math.atan2(p1.y - pt.y, p1.x - pt.x);
+              const w = Math.sin(t * 0.00165 + p.wobble) * drift * 0.1;
+              ox = Math.sin(ang) * w;
+              oy = -Math.cos(ang) * w;
+            }
+            const tw = 0.62 + 0.38 * Math.sin(t * 0.00115 + p.wobble * 1.7);
+            p.el.setAttribute("r", String(baseR * rMul));
+            p.el.setAttribute("cx", String(pt.x + ox));
+            p.el.setAttribute("cy", String(pt.y + oy));
+            p.el.setAttribute("opacity", String(Math.min(1, baseOp * tw * 0.95)));
+          } else if (p.kind === "orbit") {
+            const n = nodeIndex.get(p.nodeId);
+            if (!n) {
+              p.el.setAttribute("opacity", "0");
+              return;
+            }
+            p.ang += p.speed * (p.speedMul || 1) * dt * (p.dir || 1);
+            const ox = Math.cos(p.ang) * p.rad;
+            const oy = Math.sin(p.ang) * p.rad;
+            const tw = 0.52 + 0.48 * Math.sin(t * 0.00195 + p.wobble);
+            p.el.setAttribute("r", String(baseR * rMul));
+            p.el.setAttribute("cx", String(n.x + ox));
+            p.el.setAttribute("cy", String(n.y + oy));
+            p.el.setAttribute("opacity", String(Math.min(1, baseOp * tw * 0.82)));
+          }
+        });
+
+        parallaxRafId = requestAnimationFrame(tickParallax);
+      }
+
+      function rebuildParallaxFlow() {
+        stopParallaxLoop();
+        layerParallax.replaceChildren();
+        parallaxParticles = [];
+        layerParallax.removeAttribute("transform");
+        if (!parallaxSettings.enabled) return;
+
+        const maxSlots = Math.min(
+          PARALLAX_PARTICLE_SLOT_CAP,
+          Math.round(6 + parallaxSettings.density * 178),
+        );
+        const edgePaths = edgeEls
+          .map(({ el }) => el)
+          .filter((path) => path && path.getTotalLength && path.getTotalLength() > 0.08);
+        const edgeSlots = edgePaths.length > 0 ? Math.round(maxSlots * 0.72) : 0;
+        const nodeSlots = Math.max(maxSlots - edgeSlots, edgePaths.length ? 0 : maxSlots);
+
+        for (let i = 0; i < edgeSlots && edgePaths.length; i++) {
+          const path = edgePaths[Math.floor(Math.random() * edgePaths.length)];
+          const len = path.getTotalLength();
+          const rMul = 0.75 + Math.random() * 0.55;
+          const c = el(
+            "circle",
+            {
+              r: String(parallaxSettings.size * rMul),
+              class: "parallax-particle",
+              fill: "rgba(196, 232, 255,0.92)",
+            },
+            layerParallax,
+          );
+          c.dataset.rMul = String(rMul);
+          parallaxParticles.push({
+            kind: "edge",
+            path,
+            dir: Math.random() < 0.5 ? 1 : -1,
+            s: Math.random() * len,
+            vy: 0.65 + Math.random() * 1.35,
+            speedMul: sampleParallaxSpeedMul(),
+            wobble: Math.random() * Math.PI * 2,
+            el: c,
+          });
+        }
+
+        const nodeList = NODES.slice();
+        for (let i = 0; i < nodeSlots && nodeList.length; i++) {
+          const n = nodeList[Math.floor(Math.random() * nodeList.length)];
+          const rMul = 0.55 + Math.random() * 0.5;
+          const c = el(
+            "circle",
+            {
+              r: String(parallaxSettings.size * rMul),
+              class: "parallax-particle",
+              fill: "rgba(180, 220, 255,0.88)",
+            },
+            layerParallax,
+          );
+          c.dataset.rMul = String(rMul);
+          parallaxParticles.push({
+            kind: "orbit",
+            nodeId: n.id,
+            ang: Math.random() * Math.PI * 2,
+            dir: Math.random() < 0.5 ? 1 : -1,
+            speed: 0.32 + Math.random() * 0.95,
+            speedMul: sampleParallaxSpeedMul(),
+            rad: 0.62 + Math.random() * 0.88,
+            wobble: Math.random() * Math.PI * 2,
+            el: c,
+          });
+        }
+
+        parallaxLastT = performance.now();
+        if (parallaxParticles.length) parallaxRafId = requestAnimationFrame(tickParallax);
       }
 
       // ─── Label geometry ────────────────────────────────────────────
@@ -1653,6 +1949,21 @@
       const seqParticleDensityVal = document.getElementById("seq-particle-density-val");
       const seqParticleSizeVal = document.getElementById("seq-particle-size-val");
       const seqBroadcastPaceVal = document.getElementById("seq-broadcast-pace-val");
+      const parallaxTuner = document.getElementById("parallax-tuner");
+      const btnParallaxTuner = document.getElementById("btn-parallax-tuner");
+      const parallaxEnabledEl = document.getElementById("parallax-enabled");
+      const parallaxFlowEl = document.getElementById("parallax-flow");
+      const parallaxDensityEl = document.getElementById("parallax-density");
+      const parallaxOpacityEl = document.getElementById("parallax-opacity");
+      const parallaxDriftEl = document.getElementById("parallax-drift");
+      const parallaxShiftEl = document.getElementById("parallax-shift");
+      const parallaxSizeEl = document.getElementById("parallax-size");
+      const parallaxFlowVal = document.getElementById("parallax-flow-val");
+      const parallaxDensityVal = document.getElementById("parallax-density-val");
+      const parallaxOpacityVal = document.getElementById("parallax-opacity-val");
+      const parallaxDriftVal = document.getElementById("parallax-drift-val");
+      const parallaxShiftVal = document.getElementById("parallax-shift-val");
+      const parallaxSizeVal = document.getElementById("parallax-size-val");
       function showToast(msg) {
         toast.textContent = msg;
         toast.classList.add("is-visible");
@@ -1666,6 +1977,27 @@
       function hideContextMenu() {
         ctxMenu.hidden = true;
         ctxMenu.replaceChildren();
+      }
+
+      function updateParallaxTunerReadouts() {
+        if (parallaxFlowVal) parallaxFlowVal.textContent = String(Math.round(parallaxSettings.flow));
+        if (parallaxDensityVal)
+          parallaxDensityVal.textContent = `${parallaxSettings.density.toFixed(2)}×`;
+        if (parallaxOpacityVal) parallaxOpacityVal.textContent = parallaxSettings.opacity.toFixed(2);
+        if (parallaxDriftVal) parallaxDriftVal.textContent = parallaxSettings.drift.toFixed(2);
+        if (parallaxShiftVal) parallaxShiftVal.textContent = parallaxSettings.parallax.toFixed(2);
+        if (parallaxSizeVal) parallaxSizeVal.textContent = parallaxSettings.size.toFixed(2);
+      }
+
+      function syncParallaxTunerInputs() {
+        if (parallaxEnabledEl) parallaxEnabledEl.checked = parallaxSettings.enabled;
+        if (parallaxFlowEl) parallaxFlowEl.value = String(parallaxSettings.flow);
+        if (parallaxDensityEl) parallaxDensityEl.value = String(parallaxSettings.density);
+        if (parallaxOpacityEl) parallaxOpacityEl.value = String(parallaxSettings.opacity);
+        if (parallaxDriftEl) parallaxDriftEl.value = String(parallaxSettings.drift);
+        if (parallaxShiftEl) parallaxShiftEl.value = String(parallaxSettings.parallax);
+        if (parallaxSizeEl) parallaxSizeEl.value = String(parallaxSettings.size);
+        updateParallaxTunerReadouts();
       }
 
       function edgeForPair(a, b) {
@@ -2121,6 +2453,7 @@
           sequenceCounter,
           activeSequenceId,
           settings: { ...sequenceSettings },
+          parallax: { ...parallaxSettings },
           uiState: {
             connectMode,
             seqRecordMode,
@@ -2266,6 +2599,51 @@
         persistState();
       });
 
+      btnParallaxTuner.addEventListener("click", () => {
+        parallaxTuner.hidden = !parallaxTuner.hidden;
+      });
+
+      parallaxEnabledEl.addEventListener("change", () => {
+        parallaxSettings.enabled = !!parallaxEnabledEl.checked;
+        persistState();
+        rebuildParallaxFlow();
+      });
+      parallaxFlowEl.addEventListener("input", () => {
+        parallaxSettings.flow = Number(parallaxFlowEl.value);
+        updateParallaxTunerReadouts();
+        persistState();
+      });
+      parallaxDensityEl.addEventListener("input", () => {
+        parallaxSettings.density = Math.min(
+          PARALLAX_DENSITY_MAX,
+          Math.max(0, Number(parallaxDensityEl.value)),
+        );
+        updateParallaxTunerReadouts();
+        persistState();
+        rebuildParallaxFlow();
+      });
+      parallaxOpacityEl.addEventListener("input", () => {
+        parallaxSettings.opacity = Number(parallaxOpacityEl.value);
+        updateParallaxTunerReadouts();
+        persistState();
+      });
+      parallaxDriftEl.addEventListener("input", () => {
+        parallaxSettings.drift = Number(parallaxDriftEl.value);
+        updateParallaxTunerReadouts();
+        persistState();
+      });
+      parallaxShiftEl.addEventListener("input", () => {
+        parallaxSettings.parallax = Number(parallaxShiftEl.value);
+        updateParallaxTunerReadouts();
+        persistState();
+        rebuildParallaxFlow();
+      });
+      parallaxSizeEl.addEventListener("input", () => {
+        parallaxSettings.size = Number(parallaxSizeEl.value);
+        updateParallaxTunerReadouts();
+        persistState();
+      });
+
       document.getElementById("btn-save-default").addEventListener("click", () => {
         if (saveCurrentAsDefault()) {
           const n = sequences.length;
@@ -2294,6 +2672,7 @@
           seqParticleDensity.value = String(sequenceSettings.particleDensity);
           seqParticleSize.value = String(sequenceSettings.particleSize);
           seqBroadcastPace.value = String(sequenceSettings.broadcastPace);
+          syncParallaxTunerInputs();
           renderEdges();
           renderNodes();
           renderSequenceChips();
@@ -2312,6 +2691,7 @@
         sequences = [];
         sequenceCounter = 0;
         Object.assign(sequenceSettings, DEFAULT_SEQUENCE_SETTINGS);
+        Object.assign(parallaxSettings, DEFAULT_PARALLAX_SETTINGS);
         seqSpeed.value = String(sequenceSettings.speed);
         seqEase.value = String(sequenceSettings.ease);
         seqGlow.value = String(sequenceSettings.glow);
@@ -2321,6 +2701,7 @@
         seqParticleDensity.value = String(sequenceSettings.particleDensity);
         seqParticleSize.value = String(sequenceSettings.particleSize);
         seqBroadcastPace.value = String(sequenceSettings.broadcastPace);
+        syncParallaxTunerInputs();
         renderEdges();
         renderNodes();
         renderSequenceChips();
@@ -2391,6 +2772,7 @@
 
       // ─── Initial render ────────────────────────────────────────────
       loadPersistedState();
+      syncParallaxTunerInputs();
       seqSpeed.value = String(sequenceSettings.speed);
       seqEase.value = String(sequenceSettings.ease);
       seqGlow.value = String(sequenceSettings.glow);
