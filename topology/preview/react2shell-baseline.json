@@ -1,0 +1,230 @@
+{
+  "nodes": [
+    {
+      "id": "external-user",
+      "label": "External User",
+      "kind": "User · partner · internet",
+      "zone": "external",
+      "x": 5.815207481384277,
+      "y": 11.759093284606934,
+      "lp": "right"
+    },
+    {
+      "id": "entry-point",
+      "label": "Entry Point",
+      "kind": "NAT / gateway",
+      "zone": "external",
+      "x": 16,
+      "y": 20,
+      "lp": "right"
+    },
+    {
+      "id": "ext-lb",
+      "label": "Load Balancer",
+      "kind": "External LB",
+      "zone": "external",
+      "x": 29,
+      "y": 26,
+      "lp": "left"
+    },
+    {
+      "id": "adc",
+      "label": "ADC",
+      "kind": "App delivery",
+      "zone": "external",
+      "x": 28.983800888061523,
+      "y": 37.38359451293945,
+      "lp": "right"
+    },
+    {
+      "id": "fw-node",
+      "label": "FW",
+      "kind": "Firewall",
+      "zone": "external",
+      "x": 40.04741668701172,
+      "y": 38.463069915771484,
+      "lp": "bottom"
+    },
+    {
+      "id": "dc-app",
+      "label": "App Server",
+      "kind": "Service tier",
+      "zone": "ai",
+      "x": 65.02205657958984,
+      "y": 14.081415176391602,
+      "lp": "right"
+    },
+    {
+      "id": "ai-app",
+      "label": "AI App Server",
+      "kind": "Inference · agent",
+      "zone": "ai",
+      "x": 59.48212432861328,
+      "y": 25.909339904785156,
+      "lp": "right"
+    },
+    {
+      "id": "splunk",
+      "label": "Splunk",
+      "kind": "SIEM / telemetry",
+      "zone": "ai",
+      "x": 60.01246643066406,
+      "y": 48.50135803222656,
+      "lp": "top"
+    },
+    {
+      "id": "dc-db",
+      "label": "Datastore / DB",
+      "kind": "System of record",
+      "zone": "backend",
+      "x": 94,
+      "y": 13,
+      "lp": "right"
+    },
+    {
+      "id": "dc-switch",
+      "label": "Smart Switch",
+      "kind": "L2/L3 · ToR",
+      "zone": "backend",
+      "x": 110,
+      "y": 22,
+      "lp": "left"
+    },
+    {
+      "id": "backend-db",
+      "label": "Backend DB",
+      "kind": "Database tier",
+      "zone": "backend",
+      "x": 89,
+      "y": 34,
+      "lp": "right"
+    },
+    {
+      "id": "ips-node",
+      "label": "IPS",
+      "kind": "Intrusion prev.",
+      "zone": "ai",
+      "x": 80.24024200439453,
+      "y": 40.1701774597168,
+      "lp": "bottom"
+    },
+    {
+      "id": "node-13",
+      "label": "App Server",
+      "kind": "Custom",
+      "zone": "ai",
+      "x": 53.76854705810547,
+      "y": 14.139466285705566,
+      "lp": "right"
+    },
+    {
+      "id": "node-14",
+      "label": "Backend DB",
+      "kind": "Custom",
+      "zone": "backend",
+      "x": 104.45104217529297,
+      "y": 32.655784606933594,
+      "lp": "right"
+    }
+  ],
+  "edges": [
+    {
+      "from": "external-user",
+      "to": "entry-point",
+      "kind": "solid"
+    },
+    {
+      "from": "entry-point",
+      "to": "ext-lb",
+      "kind": "solid"
+    },
+    {
+      "from": "ext-lb",
+      "to": "adc",
+      "kind": "solid"
+    },
+    {
+      "from": "backend-db",
+      "to": "dc-switch",
+      "kind": "solid"
+    },
+    {
+      "from": "dc-switch",
+      "to": "dc-db",
+      "kind": "solid"
+    },
+    {
+      "from": "dc-db",
+      "to": "ai-app",
+      "kind": "solid",
+      "crosses": "ips"
+    },
+    {
+      "from": "ext-lb",
+      "to": "fw-node",
+      "kind": "solid",
+      "crosses": "fw"
+    },
+    {
+      "from": "fw-node",
+      "to": "ai-app",
+      "kind": "solid"
+    },
+    {
+      "from": "ai-app",
+      "to": "ips-node",
+      "kind": "solid",
+      "crosses": "ips"
+    },
+    {
+      "from": "ips-node",
+      "to": "backend-db",
+      "kind": "solid"
+    }
+  ],
+  "sequences": [
+    {
+      "id": "seq-2",
+      "nodes": [
+        "external-user",
+        "entry-point",
+        "ext-lb",
+        "fw-node",
+        "ai-app",
+        "ips-node",
+        "backend-db",
+        "dc-switch",
+        "dc-db",
+        "ai-app",
+        "fw-node",
+        "ext-lb",
+        "entry-point",
+        "external-user"
+      ],
+      "label": "React2Shell-1"
+    }
+  ],
+  "sequenceCounter": 2,
+  "sequenceDraft": [],
+  "activeSequenceId": "seq-2",
+  "settings": {
+    "speed": 12,
+    "ease": 0.1,
+    "glow": 0.35,
+    "intensity": 1.6,
+    "snakeWidthMult": 4,
+    "snakeLengthFactor": 0.4,
+    "particleDensity": 3.9,
+    "particleSize": 0.65,
+    "broadcastPace": 1.35
+  },
+  "parallax": {
+    "enabled": true,
+    "flow": 27,
+    "density": 3.25,
+    "opacity": 0.44,
+    "drift": 2.2,
+    "parallax": 1.62,
+    "size": 0.1
+  }
+}

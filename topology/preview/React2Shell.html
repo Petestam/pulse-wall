@@ -563,7 +563,7 @@
     <div class="chrome-stack">
       <div id="seq-chip-row" class="seq-chip-row"></div>
       <div class="chrome" role="toolbar" aria-label="React2Shell controls">
-        <button type="button" id="btn-connect" class="is-active">Connect: On</button>
+        <button type="button" id="btn-connect">Connect: Off</button>
         <button type="button" id="btn-seq-record">Seq record: Off</button>
         <button type="button" id="btn-seq-save">Save sequence</button>
         <button type="button" id="btn-seq-tuner">Sequence tuner</button>
@@ -573,7 +573,7 @@
         <button
           type="button"
           id="btn-save-default"
-          title="Store this layout as the default for React2Shell (all entry points on this browser)"
+          title="Saves in this browser and downloads react2shell-baseline.json — commit that file next to this page so teammates get the same default"
         >
           Save as default
         </button>
@@ -691,6 +691,9 @@
       </div>
     </aside>
 
+    <!-- Same JSON shape as “Copy data”. If present (non-empty), first-time visitors use it when localStorage is empty. -->
+    <script type="application/json" id="react2shell-shipped-baseline"></script>
+
     <script>
       /*
        * React2Shell — dataviz pass
@@ -703,6 +706,10 @@
        *   • Delete node mode: click node to remove (and detach strands)
        *   • "Copy data" → clipboard JSON of current NODES+EDGES so you can paste
        *     edits back into this file
+       *   • Team default: react2shell-baseline.json (committed beside this file) or JSON inside
+       *     #react2shell-shipped-baseline — loaded for new visitors when localStorage is empty.
+       *     You do not need localStorage for shared defaults; it only remembers this browser.
+       *   • "Save as default" → updates localStorage and downloads baseline JSON to commit/replace.
        *
        * All geometry in a 120 × 50 viewBox.
        */
@@ -788,7 +795,7 @@
       let NODES = INITIAL_NODES.map((n) => ({ ...n }));
       let EDGES = INITIAL_EDGES.map((e) => ({ ...e }));
       let nodeIndex = new Map(NODES.map((n) => [n.id, n]));
-      let connectMode = true;
+      let connectMode = false;
       let addNodeMode = false;
       let deleteNodeMode = false;
       let connectFromId = null;
@@ -1043,17 +1050,71 @@
         }
       }
 
-      /** Session snapshot first; otherwise user default; otherwise built-in INITIAL_* (already in memory). */
+      /** Session snapshot first; otherwise user default in this browser only. */
       function loadPersistedState() {
-        if (tryLoadSnapshotKey(STORAGE_KEY)) return;
-        tryLoadSnapshotKey(BASELINE_KEY);
+        if (tryLoadSnapshotKey(STORAGE_KEY)) return true;
+        if (tryLoadSnapshotKey(BASELINE_KEY)) return true;
+        return false;
+      }
+
+      /** Teammate default: commit beside React2Shell.html (or paste into #react2shell-shipped-baseline). */
+      const SHIPPED_BASELINE_FILENAME = "react2shell-baseline.json";
+
+      function tryApplyEmbeddedShippedBaseline() {
+        const el = document.getElementById("react2shell-shipped-baseline");
+        if (!el) return false;
+        const raw = (el.textContent || "").trim();
+        if (!raw) return false;
+        try {
+          const data = JSON.parse(raw);
+          return applySnapshotData(data);
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function writeBaselineAndSessionStorage(json) {
+        try {
+          localStorage.setItem(BASELINE_KEY, json);
+          localStorage.setItem(STORAGE_KEY, json);
+        } catch (_) {}
+      }
+
+      function downloadShippedBaselineJson(jsonString) {
+        try {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(new Blob([jsonString], { type: "application/json" }));
+          a.download = SHIPPED_BASELINE_FILENAME;
+          a.rel = "noopener";
+          document.body.appendChild(a);
+          a.click();
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        } catch (_) {}
+      }
+
+      /** If localStorage is empty, apply embedded JSON or fetched baseline file, then mirror into storage. */
+      async function hydrateFromShippedBaselineIfNeeded() {
+        if (loadPersistedState()) return;
+        if (tryApplyEmbeddedShippedBaseline()) {
+          writeBaselineAndSessionStorage(JSON.stringify(buildSnapshotPayload()));
+          return;
+        }
+        try {
+          const url = new URL(SHIPPED_BASELINE_FILENAME, window.location.href);
+          const res = await fetch(url.href, { cache: "no-store" });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (applySnapshotData(data))
+            writeBaselineAndSessionStorage(JSON.stringify(buildSnapshotPayload()));
+        } catch (_) {}
       }
 
       function saveCurrentAsDefault() {
         try {
           const json = JSON.stringify(buildSnapshotPayload());
-          localStorage.setItem(BASELINE_KEY, json);
-          localStorage.setItem(STORAGE_KEY, json);
+          writeBaselineAndSessionStorage(json);
+          downloadShippedBaselineJson(json);
         } catch (_) {
           return false;
         }
@@ -2649,8 +2710,8 @@
           const n = sequences.length;
           showToast(
             n
-              ? `Saved as default · ${n} saved sequence${n === 1 ? "" : "s"}`
-              : "Saved as default",
+              ? `Saved · ${n} sequence${n === 1 ? "" : "s"} · downloaded ${SHIPPED_BASELINE_FILENAME} (commit beside this HTML for teammates)`
+              : `Saved · downloaded ${SHIPPED_BASELINE_FILENAME} (commit beside this HTML for teammates)`,
           );
         } else showToast("Could not save default");
       });
@@ -2659,6 +2720,7 @@
         stopSequencePlayback();
         activeSequenceId = null;
         seqDraft = [];
+        connectMode = false;
         seqRecordMode = false;
         clearSelection();
 
@@ -2770,25 +2832,31 @@
       window.addEventListener("resize", hideContextMenu);
       window.addEventListener("scroll", hideContextMenu, true);
 
-      // ─── Initial render ────────────────────────────────────────────
-      loadPersistedState();
-      syncParallaxTunerInputs();
-      seqSpeed.value = String(sequenceSettings.speed);
-      seqEase.value = String(sequenceSettings.ease);
-      seqGlow.value = String(sequenceSettings.glow);
-      seqIntensity.value = String(sequenceSettings.intensity);
-      seqSnakeWidth.value = String(sequenceSettings.snakeWidthMult);
-      seqSnakeLength.value = String(sequenceSettings.snakeLengthFactor);
-      seqParticleDensity.value = String(sequenceSettings.particleDensity);
-      seqParticleSize.value = String(sequenceSettings.particleSize);
-      seqBroadcastPace.value = String(sequenceSettings.broadcastPace);
-      renderZones();
-      renderDividers();
-      renderEdges();
-      renderNodes();
-      renderSequenceChips();
-      updateTunerReadouts();
-      updateModeButtons();
+      // ─── Initial render (async: optional shipped baseline for new visitors) ─
+      function finishBootstrap() {
+        syncParallaxTunerInputs();
+        seqSpeed.value = String(sequenceSettings.speed);
+        seqEase.value = String(sequenceSettings.ease);
+        seqGlow.value = String(sequenceSettings.glow);
+        seqIntensity.value = String(sequenceSettings.intensity);
+        seqSnakeWidth.value = String(sequenceSettings.snakeWidthMult);
+        seqSnakeLength.value = String(sequenceSettings.snakeLengthFactor);
+        seqParticleDensity.value = String(sequenceSettings.particleDensity);
+        seqParticleSize.value = String(sequenceSettings.particleSize);
+        seqBroadcastPace.value = String(sequenceSettings.broadcastPace);
+        renderZones();
+        renderDividers();
+        renderEdges();
+        renderNodes();
+        renderSequenceChips();
+        updateTunerReadouts();
+        updateModeButtons();
+      }
+
+      void (async () => {
+        await hydrateFromShippedBaselineIfNeeded();
+        finishBootstrap();
+      })();
     </script>
     <script src="canvas-nav.js"></script>
   </body>
