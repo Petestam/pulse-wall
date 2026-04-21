@@ -793,8 +793,14 @@
             kind,
             ...(crosses ? { crosses } : {}),
           })),
-          sequences: sequences.map((s) => ({ id: s.id, nodes: [...s.nodes] })),
+          sequences: sequences.map((s) => {
+            const o = { id: s.id, nodes: [...s.nodes] };
+            if (s.label && String(s.label).trim()) o.label = String(s.label).trim();
+            return o;
+          }),
           sequenceCounter,
+          sequenceDraft: [...seqDraft],
+          activeSequenceId,
           settings: { ...sequenceSettings },
         };
       }
@@ -832,12 +838,25 @@
         sequences = Array.isArray(data.sequences)
           ? data.sequences
               .filter((s) => s && s.id && Array.isArray(s.nodes))
-              .map((s) => ({ id: String(s.id), nodes: s.nodes.map(String) }))
+              .map((s) => {
+                const id = String(s.id);
+                const nodes = s.nodes.map(String);
+                const label =
+                  typeof s.label === "string" && s.label.trim() ? s.label.trim() : undefined;
+                return label ? { id, nodes, label } : { id, nodes };
+              })
               .filter((s) => s.nodes.length >= 2)
           : [];
-        sequenceCounter = Number.isFinite(data.sequenceCounter)
-          ? Number(data.sequenceCounter)
-          : sequences.length;
+        {
+          const fromFile = Number.isFinite(data.sequenceCounter)
+            ? Number(data.sequenceCounter)
+            : sequences.length;
+          const maxFromIds = sequences.reduce((max, s) => {
+            const m = /^seq-(\d+)$/.exec(s.id);
+            return m ? Math.max(max, Number(m[1])) : max;
+          }, 0);
+          sequenceCounter = Math.max(fromFile, maxFromIds);
+        }
         if (data.settings) {
           const s = data.settings;
           if (Number.isFinite(s.speed)) sequenceSettings.speed = s.speed;
@@ -862,6 +881,17 @@
           return m ? Math.max(max, Number(m[1])) : max;
         }, 0);
         nodeCounter = Math.max(NODES.length, maxGeneratedId);
+
+        const draftRaw = Array.isArray(data.sequenceDraft)
+          ? data.sequenceDraft
+          : Array.isArray(data.seqDraft)
+            ? data.seqDraft
+            : [];
+        seqDraft = draftRaw.map(String).filter((id) => nodeIndex.has(id));
+        const aid = data.activeSequenceId;
+        activeSequenceId =
+          aid && sequences.some((s) => s.id === String(aid)) ? String(aid) : null;
+
         return true;
       }
 
@@ -1859,22 +1889,78 @@
         state.rafId = requestAnimationFrame(tick);
       }
 
+      function sequenceDisplayName(seq) {
+        return (seq.label && String(seq.label).trim()) || seq.id;
+      }
+
+      function beginRenameSequence(seq) {
+        const btn = seqChipRow.querySelector(`button[data-sequence-id="${seq.id}"]`);
+        const rect = btn
+          ? btn.getBoundingClientRect()
+          : { left: 80, top: 80, width: 220 };
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = sequenceDisplayName(seq);
+        input.className = "edit-input";
+        input.setAttribute("aria-label", "Rename sequence");
+        Object.assign(input.style, {
+          left: `${Math.max(8, rect.left)}px`,
+          top: `${Math.max(8, rect.top)}px`,
+          width: `${Math.max(260, rect.width + 48)}px`,
+        });
+        document.body.appendChild(input);
+        input.focus();
+        input.select();
+
+        let saved = true;
+        const cleanup = () => {
+          if (saved) {
+            const t = input.value.trim();
+            if (!t || t === seq.id) {
+              delete seq.label;
+            } else {
+              seq.label = t;
+            }
+            persistState();
+            renderSequenceChips();
+          }
+          input.remove();
+        };
+        input.addEventListener("blur", cleanup);
+        input.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") {
+            ke.preventDefault();
+            input.blur();
+          } else if (ke.key === "Escape") {
+            ke.preventDefault();
+            saved = false;
+            input.blur();
+          }
+        });
+      }
+
       function renderSequenceChips() {
         seqChipRow.replaceChildren();
         sequences.forEach((seq) => {
           const b = document.createElement("button");
           b.type = "button";
           b.className = "seq-chip" + (seq.id === activeSequenceId ? " is-active" : "");
-          b.textContent = `${seq.id} (${seq.nodes.length})`;
+          b.setAttribute("data-sequence-id", seq.id);
+          b.textContent = `${sequenceDisplayName(seq)} (${seq.nodes.length})`;
           b.addEventListener("click", () => playSequenceById(seq.id));
           b.addEventListener("contextmenu", (evt) => {
             evt.preventDefault();
             evt.stopPropagation();
             showContextMenu(evt.clientX, evt.clientY, [
               {
+                label: "Rename sequence",
+                onClick: () => beginRenameSequence(seq),
+              },
+              {
                 label: "Delete sequence",
                 onClick: () => {
                   const before = sequences.length;
+                  const name = sequenceDisplayName(seq);
                   sequences = sequences.filter((s) => s.id !== seq.id);
                   if (activeSequenceId === seq.id) {
                     activeSequenceId = null;
@@ -1883,7 +1969,7 @@
                   renderSequenceChips();
                   persistState();
                   if (sequences.length < before) {
-                    showToast(`Deleted ${seq.id}`);
+                    showToast(`Deleted ${name}`);
                   }
                 },
               },
@@ -2026,7 +2112,11 @@
             kind,
             ...(crosses ? { crosses } : {}),
           })),
-          sequences: sequences.map((s) => ({ id: s.id, nodes: [...s.nodes] })),
+          sequences: sequences.map((s) => {
+            const o = { id: s.id, nodes: [...s.nodes] };
+            if (s.label && String(s.label).trim()) o.label = String(s.label).trim();
+            return o;
+          }),
           sequenceDraft: [...seqDraft],
           sequenceCounter,
           activeSequenceId,
@@ -2177,8 +2267,14 @@
       });
 
       document.getElementById("btn-save-default").addEventListener("click", () => {
-        if (saveCurrentAsDefault()) showToast("Saved as default");
-        else showToast("Could not save default");
+        if (saveCurrentAsDefault()) {
+          const n = sequences.length;
+          showToast(
+            n
+              ? `Saved as default · ${n} saved sequence${n === 1 ? "" : "s"}`
+              : "Saved as default",
+          );
+        } else showToast("Could not save default");
       });
 
       document.getElementById("btn-reset").addEventListener("click", () => {
